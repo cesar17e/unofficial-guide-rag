@@ -455,3 +455,32 @@ I would also make Criterion 4 test all chunks in the `campus_life` corpus
 instead of the same five deterministic samples. That would give a stronger
 measurement of whether my document-level chunking consistently preserves
 complete boundaries across the corpus.
+
+## Capstone
+
+**What This Extends**
+
+This capstone extends The Unofficial Guide, the RAG question-answering system
+built in Units 1 and 2. The existing application loads and chunks the
+`campus_life` corpus, embeds and stores its documents in Chroma, combines
+semantic retrieval with BM25/RRF reranking, applies a relevance gate, and uses
+Gemini to produce grounded answers with source filenames. For Unit 9, I am
+adding an operational layer that records structured JSONL logs for question
+requests, measures end-to-end and individual pipeline-stage timing, captures
+usage measurements, and records successful, refused, and failed runs.
+
+**The Shape**
+
+I chose Shape A, Deploy and Instrument, using Path B, Local with Logs. The
+system will run locally through its existing HTTP service using a documented
+command, and real sessions will leave persistent structured records that can
+be inspected after the process exits. This unit is limited to making the
+existing RAG pipeline reproducible and observable; it does not change how the
+system decides or generates an answer.
+
+Out of scope are changes to semantic retrieval, BM25/RRF reranking, document
+chunking, embeddings, the relevance threshold, Gemini model configuration,
+and the existing rate-limiting behavior. I am also not adding Docker, cloud
+hosting, or a new user interface. Keeping those areas unchanged makes it
+possible to attribute the capstone results to the new run path,
+instrumentation, and measurement layer rather than to a different RAG system.
