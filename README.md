@@ -472,7 +472,7 @@ usage measurements, and records successful, refused, and failed runs.
 **The Shape**
 
 I chose Shape A, Deploy and Instrument, using Path B, Local with Logs. The
-system will run locally using documented commands, 
+system will run locally using documented commands,
 and real sessions will leave persistent structured records that can
 be inspected after the process exits. This unit is limited to making the
 existing RAG pipeline reproducible and observable; it does not change how the
@@ -484,3 +484,48 @@ and the existing rate-limiting behavior. I am also not adding Docker, cloud
 hosting, or a new user interface. Keeping those areas unchanged makes it
 possible to attribute the capstone results to the new run path,
 instrumentation, and measurement layer rather than to a different RAG system.
+
+**Running It**
+
+The primary run path is the local command-line application. Complete clean
+setup, indexing, question, logging, cache, testing, troubleshooting, and
+optional Flask instructions are in [RUNNING.md](RUNNING.md).
+
+
+**Instrumentation**
+
+These preliminary execution records came from the local CLI on November 18,
+2026, using the existing `campus_life__default` Chroma index. The first ten
+records are genuine in-scope Gemini requests run in one process with
+`AI201_CACHE=0`. The next two records repeat one question with normal caching
+enabled: the first reached Gemini and the second was served from the response
+cache. The following record is an out-of-scope relevance-gate refusal. The
+final record is a controlled failure produced by requesting the nonexistent
+`capstone_missing` index variant.
+
+Each JSONL object was copied without changing its measured values from the
+ignored local file `logs/rag_runs.jsonl`. `session_id` identifies the
+application process and `request_id` identifies one question. The three
+millisecond fields measure retrieval, generation, and the complete pipeline.
+The token fields report newly consumed Gemini tokens; a cache hit therefore
+uses zero, while a refusal never reaches generation and has
+`cache_hit: null`. `error` contains only a safe type and message. These are
+reproducibility and instrumentation checks, not the formal capstone evaluation
+or final cost calculation.
+
+```jsonl
+{"timestamp": "2026-11-18T20:05:13.547Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "9c83db61-fd6c-4732-be7d-e2d8c2eecdd6", "question": "How are juniors and seniors ranked in the housing lottery?", "answer": "Juniors and seniors in the housing lottery are ordered by accumulated credit hours first, with a random tie-break used only when necessary (admin_housing_lottery.txt).", "status": "success", "retrieval_ms": 2372.178375000658, "generation_ms": 2014.8454589980247, "duration_ms": 4388.563374999649, "prompt_tokens": 719, "output_tokens": 36, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:19.017Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "2376a3dd-d1b3-4c7e-a3b3-fd02baf1a6a8", "question": "Are the CS 340 midterm and final open-book?", "answer": "Yes, both the midterm and the final for CS 340 are open-book (Sources: course_cs_340_exams.txt and course_cs_340.txt).", "status": "success", "retrieval_ms": 274.620459000289, "generation_ms": 5194.711959000415, "duration_ms": 5469.409291999909, "prompt_tokens": 630, "output_tokens": 43, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:23.178Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "58c4df7a-ea76-4cce-9ac3-59c3e5e48a89", "question": "What time does Halden Hall close?", "answer": "Halden Hall closes at 7:00pm. \n\nSources: `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`", "status": "success", "retrieval_ms": 291.07762499916134, "generation_ms": 3865.9060419995512, "duration_ms": 4157.094333000714, "prompt_tokens": 694, "output_tokens": 40, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:24.993Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "e0dcf741-861f-486f-b341-78f70d3d19c3", "question": "When is the best time to do laundry in Aldridge Hall?", "answer": "The best time to do laundry in Aldridge Hall is Tuesday or Wednesday morning. \n\nSource: housing_aldridge_hall_laundry.txt (also mentioned in housing_aldridge_hall_laundry.txt / housing_aldridge_hall.txt has building details, but the laundry timing is explicitly in housing_aldridge_hall_laundry.txt).", "status": "success", "retrieval_ms": 257.3646249984449, "generation_ms": 1554.7439160000067, "duration_ms": 1812.189167001634, "prompt_tokens": 640, "output_tokens": 78, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:26.328Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "e2e65053-539d-4026-9181-ef10eab4fe52", "question": "How long does it take to walk from Fenwick Court to central campus?", "answer": "It takes 18 minutes on foot to walk from Fenwick Court to central campus. \n\nSource documents: `transit_walking.txt` and `housing_fenwick_court.txt`", "status": "success", "retrieval_ms": 72.34266700106673, "generation_ms": 1261.5204590001667, "duration_ms": 1333.9057089979178, "prompt_tokens": 708, "output_tokens": 41, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:26.954Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "3331f2c0-1d5c-4835-a86c-77e21e34ec4a", "question": "When can a student add or drop a course?", "answer": "Based on the provided document, you can add a course through the end of the second week. Dropping is allowed through the end of week six (admin_add_drop_deadline.txt).", "status": "success", "retrieval_ms": 104.89008400327293, "generation_ms": 520.3745830003754, "duration_ms": 625.3197080004611, "prompt_tokens": 517, "output_tokens": 40, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:27.923Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "91efb61b-46fa-4a6a-8f3f-7f3385cbb2b4", "question": "How long do interlibrary loan requests usually take?", "answer": "Interlibrary system requests take about a week (from admin_library_holds.txt).", "status": "success", "retrieval_ms": 85.35937499982538, "generation_ms": 883.655458001158, "duration_ms": 969.0622919988527, "prompt_tokens": 536, "output_tokens": 18, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:29.405Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "5dacc7f3-c9ab-40ef-a963-3e32467fbd5e", "question": "How often does the campus shuttle run on weekdays and weekends?", "answer": "Based on the provided documents, the campus shuttle runs a loop every 20 minutes from 7am to 11pm on weekdays and every 40 minutes on weekends (transit_shuttle.txt).", "status": "success", "retrieval_ms": 78.55541600292781, "generation_ms": 1402.9609999997774, "duration_ms": 1481.5638330001093, "prompt_tokens": 639, "output_tokens": 44, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:30.325Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "f4676a84-e236-442b-b3c5-a8b7657ac363", "question": "How much printing credit does each student receive per semester?", "answer": "Every student receives $30 of printing per semester (admin_printing_quota.txt).", "status": "success", "retrieval_ms": 83.17704200089793, "generation_ms": 836.0568339994643, "duration_ms": 919.3630839981779, "prompt_tokens": 540, "output_tokens": 19, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:05:31.352Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "8b0481a9-a187-44e2-97a3-2fd6e78dcb1a", "question": "What are the library hours during reading week?", "answer": "During reading week, the library is open until 10pm. \n\nSource: study_library_hours.txt", "status": "success", "retrieval_ms": 200.9437499982596, "generation_ms": 825.6107499983045, "duration_ms": 1026.6142079999554, "prompt_tokens": 588, "output_tokens": 25, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:06:28.734Z", "session_id": "4f95684b-8326-47b0-b28b-d08101c18bee", "request_id": "f88cddd8-80d9-4c22-8897-c30a0a2df57f", "question": "For the capstone cache check only, according to the campus documents, what time does Halden Hall close?", "answer": "Halden Hall closes at 7:00pm, according to `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`.", "status": "success", "retrieval_ms": 1511.9796660001157, "generation_ms": 1414.569583001139, "duration_ms": 2926.6391660021327, "prompt_tokens": 670, "output_tokens": 38, "cache_hit": false, "error": null}
+{"timestamp": "2026-11-18T20:06:29.022Z", "session_id": "4f95684b-8326-47b0-b28b-d08101c18bee", "request_id": "6f83e798-c9ec-4bc9-b3e8-021d29f6c8f8", "question": "For the capstone cache check only, according to the campus documents, what time does Halden Hall close?", "answer": "Halden Hall closes at 7:00pm, according to `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`.", "status": "success", "retrieval_ms": 285.9121250003227, "generation_ms": 0.15945799896144308, "duration_ms": 286.12854200036963, "prompt_tokens": 0, "output_tokens": 0, "cache_hit": true, "error": null}
+{"timestamp": "2026-11-18T20:06:29.134Z", "session_id": "4f95684b-8326-47b0-b28b-d08101c18bee", "request_id": "ddeb4407-faf6-4e75-93f6-8171c992a5bc", "question": "What is the capital of Mongolia?", "answer": "I don't have enough information about that.", "status": "refused", "retrieval_ms": 112.41745900042588, "generation_ms": null, "duration_ms": 112.4577920018055, "prompt_tokens": 0, "output_tokens": 0, "cache_hit": null, "error": null}
+{"timestamp": "2026-11-18T20:06:35.336Z", "session_id": "7ef1d665-f362-459e-9f2d-674c53e405a9", "request_id": "469ff352-4652-427f-9d94-dd078730c106", "question": "What time does Halden Hall close?", "answer": null, "status": "error", "retrieval_ms": 169.4855829991866, "generation_ms": null, "duration_ms": 169.4890420003503, "prompt_tokens": null, "output_tokens": null, "cache_hit": null, "error": {"type": "RuntimeError", "message": "The question could not be completed."}}
+```

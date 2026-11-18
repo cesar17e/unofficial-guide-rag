@@ -1,11 +1,7 @@
-# AI201 — pinned with BOTH lower and upper bounds, on purpose.
-#
-#
-# Supported Python: 3.11, 3.12, or 3.13. NOT 3.14 — it ships as the default on
-# recent macOS versions and several of these packages don't support it yet.
+# Direct dependencies pinned to the versions verified with Python 3.12.15.
 
 # Loads your API key out of .env
-python-dotenv>=1.0,<1.2
+python-dotenv==1.1.1
 
 # Stores the vectors and searches them. Runs on your machine.
 #
@@ -22,7 +18,13 @@ python-dotenv>=1.0,<1.2
 # Unit 2's "try a second embedding model" option is the one thing that does
 # need the heavier route. It is an optional install, not a requirement:
 #     pip install 'sentence-transformers>=3.4,<3.5'
-chromadb>=0.6,<0.7
+chromadb==0.6.3
+
+# Chroma's local ONNX embedding path. Pin these transitive dependencies because
+# newer releases can change available execution providers and model behavior.
+onnxruntime==1.30.0
+numpy==2.5.3
+tokenizers==0.23.2
 
 # Not used directly. This is chromadb's telemetry dependency, and chromadb
 # declares it as `posthog>=2.4.0` with NO upper bound. posthog 7.x changed a
@@ -31,21 +33,21 @@ chromadb>=0.6,<0.7
 # It looks exactly like a real error and isn't one. Pinned here because
 # chromadb didn't pin it — this is the same class of bug as the unpinned
 # Gradio that crashed a live class last year.
-posthog>=3.0,<4.0
+posthog==3.25.0
 
 # Calls the hosted model that writes answers. The only paid dependency,
 # and it's free at the tier this course uses.
-google-genai>=1.0,<2.0
+google-genai==1.75.0
 
 # Keyword search, for one of unit 2's improvement options. Shipped pinned so
 # it's there if you want it — the implementation is yours to write.
-rank-bm25>=0.2.2,<0.3
+rank-bm25==0.2.2
 
 # Serves the pipeline over HTTP, so the same code can run as a web service
 # instead of a command that exits. That's serve.py.
-flask>=3.0,<3.2
+flask==3.1.3
 
 # Unit 9 only, and unused before then. The server Flask starts for you is a
 # development server and says so out loud; this is the one you actually deploy
 # behind. Installed now so unit 9 is a command, not a dependency problem.
-gunicorn>=23.0,<24.0
+gunicorn==23.0.0
