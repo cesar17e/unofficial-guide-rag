@@ -303,19 +303,26 @@ def ask_pipeline(
         output_tokens = usage.output_tokens if usage is not None else None
         cache_hit = usage.cache_hit if usage is not None else None
 
-    log_request(
-        request_id=request_id,
-        question=question,
-        answer=outcome["answer"],
-        status=status,
-        retrieval_ms=retrieval_ms,
-        generation_ms=generation_ms,
-        duration_ms=duration_ms,
-        prompt_tokens=prompt_tokens,
-        output_tokens=output_tokens,
-        cache_hit=cache_hit,
-        error=None,
-    )
+    try:
+        log_request(
+            request_id=request_id,
+            question=question,
+            answer=outcome["answer"],
+            status=status,
+            retrieval_ms=retrieval_ms,
+            generation_ms=generation_ms,
+            duration_ms=duration_ms,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
+            cache_hit=cache_hit,
+            error=None,
+        )
+    except Exception as logging_exc:
+        LOGGER.error(
+            "Structured request logging failed after %s response (%s).",
+            status,
+            type(logging_exc).__name__,
+        )
     return outcome
 
 

@@ -1,8 +1,10 @@
 import json
+import logging
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID
 
 from observability import SCHEMA_FIELDS, SESSION_ID, JsonlRequestLogger, safe_error
@@ -89,6 +91,27 @@ class JsonlRequestLoggerTests(unittest.TestCase):
         self.assertIsNone(record["retrieval_ms"])
         self.assertIsNone(record["generation_ms"])
         self.assertIsNone(record["cache_hit"])
+
+    def test_file_write_failure_is_raised_even_when_logging_suppresses_errors(self):
+        class BrokenStream:
+            def write(self, value):
+                raise OSError("disk write failed")
+
+            def flush(self):
+                pass
+
+            def close(self):
+                pass
+
+        logger = JsonlRequestLogger(self.log_path)
+        logger._ensure_handler()
+        logger._handler.stream = BrokenStream()
+
+        with patch.object(logging, "raiseExceptions", False):
+            with self.assertRaises(OSError):
+                logger.log_request(question="question", answer="answer", status="success")
+
+        logger.close()
 
 
 if __name__ == "__main__":

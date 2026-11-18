@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,16 @@ class _JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         return json.dumps(record.json_record, ensure_ascii=False, allow_nan=False)
+
+
+class _RaisingFileHandler(logging.FileHandler):
+    """Propagate JSONL write failures to the caller instead of suppressing them."""
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        _, error, traceback = sys.exc_info()
+        if error is None:
+            raise RuntimeError("JSONL logging failed without an active exception")
+        raise error.with_traceback(traceback)
 
 
 def new_request_id() -> str:
@@ -84,7 +95,7 @@ class JsonlRequestLogger:
         if self._handler is not None:
             return
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
-        handler = logging.FileHandler(
+        handler = _RaisingFileHandler(
             self.log_path,
             mode="a",
             encoding="utf-8",

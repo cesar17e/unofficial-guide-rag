@@ -168,6 +168,43 @@ class AskPipelineObservabilityTests(unittest.TestCase):
         self.assertIn("Structured request logging failed", captured.output[0])
         self.assertNotIn("disk unavailable", captured.output[0])
 
+    def test_logging_failure_does_not_prevent_successful_answer(self):
+        modules, _, _, _, _ = self.fake_modules()
+
+        with (
+            patch.dict(sys.modules, modules),
+            patch("app.new_request_id", return_value=REQUEST_ID),
+            patch("app.log_request", side_effect=OSError("disk unavailable")) as write_log,
+            patch("app.time.perf_counter", side_effect=[50.0, 50.1, 50.15, 50.2, 50.3, 50.4]),
+            self.assertLogs("app", level="ERROR") as captured,
+        ):
+            outcome = app.ask_pipeline("answerable question")
+
+        self.assertEqual(outcome["answer"], "grounded answer")
+        self.assertFalse(outcome["refused"])
+        write_log.assert_called_once()
+        self.assertIn("failed after success response", captured.output[0])
+        self.assertNotIn("disk unavailable", captured.output[0])
+
+    def test_logging_failure_does_not_prevent_refusal(self):
+        modules, _, _, _, generate = self.fake_modules(passed=False)
+
+        with (
+            patch.dict(sys.modules, modules),
+            patch("app.new_request_id", return_value=REQUEST_ID),
+            patch("app.log_request", side_effect=OSError("disk unavailable")) as write_log,
+            patch("app.time.perf_counter", side_effect=[60.0, 60.1, 60.15, 60.3]),
+            self.assertLogs("app", level="ERROR") as captured,
+        ):
+            outcome = app.ask_pipeline("unanswerable question")
+
+        self.assertEqual(outcome["answer"], "not enough information")
+        self.assertTrue(outcome["refused"])
+        generate.assert_not_called()
+        write_log.assert_called_once()
+        self.assertIn("failed after refused response", captured.output[0])
+        self.assertNotIn("disk unavailable", captured.output[0])
+
 
 if __name__ == "__main__":
     unittest.main()
