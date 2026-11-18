@@ -472,8 +472,8 @@ usage measurements, and records successful, refused, and failed runs.
 **The Shape**
 
 I chose Shape A, Deploy and Instrument, using Path B, Local with Logs. The
-system will run locally through its existing HTTP service using a documented
-command, and real sessions will leave persistent structured records that can
+system will run locally using documented commands, 
+and real sessions will leave persistent structured records that can
 be inspected after the process exits. This unit is limited to making the
 existing RAG pipeline reproducible and observable; it does not change how the
 system decides or generates an answer.
