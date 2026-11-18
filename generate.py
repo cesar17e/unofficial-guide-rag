@@ -33,6 +33,8 @@ import json
 import os
 import sys
 import time
+from contextvars import ContextVar
+from dataclasses import dataclass
 
 import config
 
@@ -43,6 +45,21 @@ _session_output_tokens = 0
 _cache_hits = 0
 _client = None
 _budget_warned = False
+
+
+@dataclass(frozen=True)
+class GenerationUsage:
+    """Usage produced by one context-local generation attempt."""
+
+    prompt_tokens: int | None
+    output_tokens: int | None
+    cache_hit: bool | None
+
+
+_request_usage: ContextVar[GenerationUsage | None] = ContextVar(
+    "generation_request_usage",
+    default=None,
+)
 
 
 class QuotaGuard(Exception):
@@ -122,8 +139,18 @@ def _check_budget() -> None:
     )
 
 
-def _record_tokens(response) -> None:
-    """Add one response's token counts to this session's running totals.
+def reset_request_usage() -> None:
+    """Clear generation usage for the current request context."""
+    _request_usage.set(None)
+
+
+def request_usage() -> GenerationUsage | None:
+    """Return usage for the current request context, if generation was reached."""
+    return _request_usage.get()
+
+
+def _record_tokens(response) -> tuple[int | None, int | None]:
+    """Add response tokens to session totals and return this response's counts.
 
     These come off the response itself, which is the point. When you work out
     what a run costs, a number read back from the service is a measurement and
@@ -139,11 +166,19 @@ def _record_tokens(response) -> None:
     try:
         meta = getattr(response, "usage_metadata", None)
         if meta is None:
-            return
-        _session_prompt_tokens += int(getattr(meta, "prompt_token_count", 0) or 0)
-        _session_output_tokens += int(getattr(meta, "candidates_token_count", 0) or 0)
+            return None, None
+
+        raw_prompt = getattr(meta, "prompt_token_count", None)
+        raw_output = getattr(meta, "candidates_token_count", None)
+        prompt_tokens = int(raw_prompt) if raw_prompt is not None else None
+        output_tokens = int(raw_output) if raw_output is not None else None
+
+        _session_prompt_tokens += prompt_tokens or 0
+        _session_output_tokens += output_tokens or 0
+        return prompt_tokens, output_tokens
     except Exception:
-        pass  # accounting never breaks the thing it is accounting for
+        # Accounting never breaks the thing it is accounting for.
+        return None, None
 
 
 def usage() -> str:
@@ -215,6 +250,7 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
     """
     global _session_calls, _cache_hits
 
+    reset_request_usage()
     use_cache = cache and config.CACHE_ENABLED
     key = _cache_key(prompt, system)
 
@@ -222,8 +258,10 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
         hit = _cache_read(key)
         if hit is not None:
             _cache_hits += 1
+            _request_usage.set(GenerationUsage(0, 0, True))
             return hit
 
+    _request_usage.set(GenerationUsage(None, None, False))
     _check_budget()
 
     last_error: Exception | None = None
@@ -239,7 +277,8 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
                 kwargs["config"] = {"system_instruction": system}
 
             response = client.models.generate_content(**kwargs)
-            _record_tokens(response)
+            prompt_tokens, output_tokens = _record_tokens(response)
+            _request_usage.set(GenerationUsage(prompt_tokens, output_tokens, False))
             text = (response.text or "").strip()
 
             if use_cache:

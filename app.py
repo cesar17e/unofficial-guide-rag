@@ -210,11 +210,20 @@ def ask_pipeline(
     generation_started = None
     retrieval_ms = None
     generation_ms = None
+    get_generation_usage = None
 
     try:
         from store import search
         import gate
-        from generate import answer_from_chunks, build_prompt
+        from generate import (
+            answer_from_chunks,
+            build_prompt,
+            request_usage,
+            reset_request_usage,
+        )
+
+        reset_request_usage()
+        get_generation_usage = request_usage
 
         retrieval_started = time.perf_counter()
         results = search(
@@ -260,6 +269,7 @@ def ask_pipeline(
             retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
         duration_ms = (time.perf_counter() - total_started) * 1000
+        usage = get_generation_usage() if get_generation_usage is not None else None
         try:
             log_request(
                 request_id=request_id,
@@ -269,9 +279,9 @@ def ask_pipeline(
                 retrieval_ms=retrieval_ms,
                 generation_ms=generation_ms,
                 duration_ms=duration_ms,
-                prompt_tokens=None,
-                output_tokens=None,
-                cache_hit=None,
+                prompt_tokens=usage.prompt_tokens if usage is not None else None,
+                output_tokens=usage.output_tokens if usage is not None else None,
+                cache_hit=usage.cache_hit if usage is not None else None,
                 error=safe_error(exc, "The question could not be completed."),
             )
         except Exception as logging_exc:
@@ -283,6 +293,16 @@ def ask_pipeline(
         raise
 
     duration_ms = (time.perf_counter() - total_started) * 1000
+    usage = get_generation_usage() if status == "success" else None
+    if status == "refused":
+        prompt_tokens = 0
+        output_tokens = 0
+        cache_hit = None
+    else:
+        prompt_tokens = usage.prompt_tokens if usage is not None else None
+        output_tokens = usage.output_tokens if usage is not None else None
+        cache_hit = usage.cache_hit if usage is not None else None
+
     log_request(
         request_id=request_id,
         question=question,
@@ -291,9 +311,9 @@ def ask_pipeline(
         retrieval_ms=retrieval_ms,
         generation_ms=generation_ms,
         duration_ms=duration_ms,
-        prompt_tokens=0 if status == "refused" else None,
-        output_tokens=0 if status == "refused" else None,
-        cache_hit=None,
+        prompt_tokens=prompt_tokens,
+        output_tokens=output_tokens,
+        cache_hit=cache_hit,
         error=None,
     )
     return outcome

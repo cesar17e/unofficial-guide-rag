@@ -10,14 +10,17 @@ REQUEST_ID = "00000000-0000-4000-8000-000000000001"
 
 
 class AskPipelineObservabilityTests(unittest.TestCase):
-    def fake_modules(self, *, passed=True, answer="grounded answer"):
+    def fake_modules(self, *, passed=True, answer="grounded answer", usage=None):
         results = [SimpleNamespace(source="source_b.txt"), SimpleNamespace(source="source_a.txt")]
         decision = SimpleNamespace(passed=passed, best_distance=0.2, threshold=0.6)
+        usage = usage or SimpleNamespace(prompt_tokens=21, output_tokens=5, cache_hit=False)
 
         search = Mock(return_value=results)
         check = Mock(return_value=decision)
         build_prompt = Mock(return_value="assembled prompt")
         answer_from_chunks = Mock(return_value=answer)
+        reset_request_usage = Mock()
+        request_usage = Mock(return_value=usage)
 
         modules = {
             "store": SimpleNamespace(search=search),
@@ -25,6 +28,8 @@ class AskPipelineObservabilityTests(unittest.TestCase):
             "generate": SimpleNamespace(
                 answer_from_chunks=answer_from_chunks,
                 build_prompt=build_prompt,
+                request_usage=request_usage,
+                reset_request_usage=reset_request_usage,
             ),
         }
         return modules, search, check, build_prompt, answer_from_chunks
@@ -62,10 +67,30 @@ class AskPipelineObservabilityTests(unittest.TestCase):
         self.assertAlmostEqual(record["retrieval_ms"], 25.0)
         self.assertAlmostEqual(record["generation_ms"], 300.0)
         self.assertAlmostEqual(record["duration_ms"], 700.0)
-        self.assertIsNone(record["prompt_tokens"])
-        self.assertIsNone(record["output_tokens"])
-        self.assertIsNone(record["cache_hit"])
+        self.assertEqual(record["prompt_tokens"], 21)
+        self.assertEqual(record["output_tokens"], 5)
+        self.assertFalse(record["cache_hit"])
         self.assertIsNone(record["error"])
+
+    def test_cached_success_logs_zero_new_tokens_and_cache_hit(self):
+        cached_usage = SimpleNamespace(prompt_tokens=0, output_tokens=0, cache_hit=True)
+        modules, _, _, _, generate = self.fake_modules(usage=cached_usage)
+
+        with (
+            patch.dict(sys.modules, modules),
+            patch("app.new_request_id", return_value=REQUEST_ID),
+            patch("app.log_request") as write_log,
+            patch("app.time.perf_counter", side_effect=[15.0, 15.1, 15.15, 15.2, 15.21, 15.3]),
+        ):
+            outcome = app.ask_pipeline("repeated question")
+
+        self.assertEqual(outcome["answer"], "grounded answer")
+        generate.assert_called_once()
+        write_log.assert_called_once()
+        record = write_log.call_args.kwargs
+        self.assertEqual(record["prompt_tokens"], 0)
+        self.assertEqual(record["output_tokens"], 0)
+        self.assertTrue(record["cache_hit"])
 
     def test_refusal_logs_once_without_calling_generation(self):
         modules, _, _, build_prompt, generate = self.fake_modules(passed=False)
@@ -94,7 +119,8 @@ class AskPipelineObservabilityTests(unittest.TestCase):
         self.assertIsNone(record["cache_hit"])
 
     def test_generation_failure_logs_once_and_reraises_original_exception(self):
-        modules, _, _, _, generate = self.fake_modules()
+        known_usage = SimpleNamespace(prompt_tokens=3, output_tokens=1, cache_hit=False)
+        modules, _, _, _, generate = self.fake_modules(usage=known_usage)
         original = RuntimeError("private upstream details")
         generate.side_effect = original
 
@@ -118,9 +144,9 @@ class AskPipelineObservabilityTests(unittest.TestCase):
         self.assertEqual(record["error"]["type"], "RuntimeError")
         self.assertEqual(record["error"]["message"], "The question could not be completed.")
         self.assertNotIn("private upstream details", str(record["error"]))
-        self.assertIsNone(record["prompt_tokens"])
-        self.assertIsNone(record["output_tokens"])
-        self.assertIsNone(record["cache_hit"])
+        self.assertEqual(record["prompt_tokens"], 3)
+        self.assertEqual(record["output_tokens"], 1)
+        self.assertFalse(record["cache_hit"])
 
     def test_logging_failure_does_not_mask_pipeline_exception(self):
         modules, _, _, _, generate = self.fake_modules()
