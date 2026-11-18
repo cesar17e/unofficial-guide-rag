@@ -529,3 +529,40 @@ or final cost calculation.
 {"timestamp": "2026-11-18T20:06:29.134Z", "session_id": "4f95684b-8326-47b0-b28b-d08101c18bee", "request_id": "ddeb4407-faf6-4e75-93f6-8171c992a5bc", "question": "What is the capital of Mongolia?", "answer": "I don't have enough information about that.", "status": "refused", "retrieval_ms": 112.41745900042588, "generation_ms": null, "duration_ms": 112.4577920018055, "prompt_tokens": 0, "output_tokens": 0, "cache_hit": null, "error": null}
 {"timestamp": "2026-11-18T20:06:35.336Z", "session_id": "7ef1d665-f362-459e-9f2d-674c53e405a9", "request_id": "469ff352-4652-427f-9d94-dd078730c106", "question": "What time does Halden Hall close?", "answer": null, "status": "error", "retrieval_ms": 169.4855829991866, "generation_ms": null, "duration_ms": 169.4890420003503, "prompt_tokens": null, "output_tokens": null, "cache_hit": null, "error": {"type": "RuntimeError", "message": "The question could not be completed."}}
 ```
+
+**What It Costs**
+
+I use measured token consumption as the primary operational cost metric. These
+measurements come from the ten real, in-scope requests in the first evidence
+session above, all run with `AI201_CACHE=0`. Prompt and output token counts came
+from Gemini's response metadata for each request. Retrieval, generation, and
+end-to-end durations were measured with `time.perf_counter()` and recorded in
+milliseconds by the instrumented pipeline.
+
+| Measurement | Result |
+|---|---:|
+| Requests measured | 10 |
+| Total prompt tokens | 6,211 |
+| Average prompt tokens per request | 621.1 |
+| Total output tokens | 384 |
+| Average output tokens per request | 38.4 |
+| Total combined reported tokens | 6,595 |
+| Average combined reported tokens per request | 659.5 |
+| Average retrieval latency | 382.05 ms |
+| Average generation latency | 1,836.04 ms |
+| Average end-to-end latency | 2,218.31 ms |
+| Minimum end-to-end latency | 625.32 ms |
+| Maximum end-to-end latency | 5,469.41 ms |
+
+The separate cache demonstration, relevance-gate refusal, and controlled error
+were excluded because they did not represent uncached, successful Gemini
+requests. No dollar amount is estimated here; the reported cost is the actual
+token consumption returned by Gemini.
+
+The first request also included observable cold-start retrieval overhead. Its
+retrieval stage took 2,372.18 ms, while the remaining nine retrieval stages
+ranged from 72.34 ms to 291.08 ms. That first request remains in the averages
+because it was part of the real ten-request session, but it makes the retrieval
+and end-to-end averages higher than a fully warmed session would be. Generation
+latency also varied between requests, and the maximum end-to-end request was
+not the first request.
