@@ -14,10 +14,15 @@ editing config.py.
 """
 
 import argparse
+import logging
 import sys
 import time
 
 import config
+from observability import log_request, new_request_id, safe_error
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def cmd_corpora(args):
@@ -199,40 +204,98 @@ def ask_pipeline(
     prompt just before it goes out — that's how `--show-prompt` shows you the
     prompt while the model is still thinking rather than after.
     """
-    from store import search
-    import gate
-    from generate import answer_from_chunks, build_prompt
+    request_id = new_request_id()
+    total_started = time.perf_counter()
+    retrieval_started = None
+    generation_started = None
+    retrieval_ms = None
+    generation_ms = None
 
-    results = search(
-        question,
-        top_k=top_k or config.TOP_K,
-        corpus=corpus or config.CORPUS,
-        variant=variant,
+    try:
+        from store import search
+        import gate
+        from generate import answer_from_chunks, build_prompt
+
+        retrieval_started = time.perf_counter()
+        results = search(
+            question,
+            top_k=top_k or config.TOP_K,
+            corpus=corpus or config.CORPUS,
+            variant=variant,
+        )
+        retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
+
+        decision = gate.check(results, threshold=threshold)
+        if on_gate is not None:
+            on_gate(decision)
+
+        outcome = {
+            "question": question,
+            "refused": not decision.passed,
+            "best_distance": decision.best_distance,
+            "threshold": decision.threshold,
+            "sources": [],
+            "prompt": None,
+        }
+
+        if not decision.passed:
+            outcome["answer"] = gate.REFUSAL
+            status = "refused"
+        else:
+            prompt = build_prompt(question, results)
+            if on_prompt is not None:
+                on_prompt(prompt)
+
+            outcome["prompt"] = prompt
+            generation_started = time.perf_counter()
+            outcome["answer"] = answer_from_chunks(question, results)
+            generation_ms = (time.perf_counter() - generation_started) * 1000
+            outcome["sources"] = sorted({r.source for r in results})
+            status = "success"
+
+    except Exception as exc:
+        if generation_started is not None and generation_ms is None:
+            generation_ms = (time.perf_counter() - generation_started) * 1000
+        elif retrieval_started is not None and retrieval_ms is None:
+            retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
+
+        duration_ms = (time.perf_counter() - total_started) * 1000
+        try:
+            log_request(
+                request_id=request_id,
+                question=question,
+                answer=None,
+                status="error",
+                retrieval_ms=retrieval_ms,
+                generation_ms=generation_ms,
+                duration_ms=duration_ms,
+                prompt_tokens=None,
+                output_tokens=None,
+                cache_hit=None,
+                error=safe_error(exc, "The question could not be completed."),
+            )
+        except Exception as logging_exc:
+            LOGGER.error(
+                "Structured request logging failed while preserving %s (%s).",
+                type(exc).__name__,
+                type(logging_exc).__name__,
+            )
+        raise
+
+    duration_ms = (time.perf_counter() - total_started) * 1000
+    log_request(
+        request_id=request_id,
+        question=question,
+        answer=outcome["answer"],
+        status=status,
+        retrieval_ms=retrieval_ms,
+        generation_ms=generation_ms,
+        duration_ms=duration_ms,
+        prompt_tokens=0 if status == "refused" else None,
+        output_tokens=0 if status == "refused" else None,
+        cache_hit=None,
+        error=None,
     )
-    decision = gate.check(results, threshold=threshold)
-    if on_gate is not None:
-        on_gate(decision)
-
-    outcome = {
-        "question": question,
-        "refused": not decision.passed,
-        "best_distance": decision.best_distance,
-        "threshold": decision.threshold,
-        "sources": [],
-        "prompt": None,
-    }
-
-    if not decision.passed:
-        outcome["answer"] = gate.REFUSAL
-        return outcome
-
-    prompt = build_prompt(question, results)
-    if on_prompt is not None:
-        on_prompt(prompt)
-
-    outcome["prompt"] = prompt
-    outcome["answer"] = answer_from_chunks(question, results)
-    outcome["sources"] = sorted({r.source for r in results})
     return outcome
 
 
