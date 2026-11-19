@@ -20,8 +20,8 @@ packages, but Python 3.12.15 is the version verified for this capstone.
 ## Clone the repository
 
 ```bash
-git clone https://github.com/cesar17e/ai201-project1-unofficial-guide-starter-v2026.git
-cd ai201-project1-unofficial-guide-starter-v2026
+git clone https://github.com/cesar17e/unofficial-guide-rag.git
+cd unofficial-guide-rag
 ```
 
 ## Install on macOS or Linux
