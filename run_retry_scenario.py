@@ -15,8 +15,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import sys
+from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -52,8 +54,11 @@ def main() -> int:
     args = parser.parse_args()
 
     output = ROOT / "results" / f"retry_scenario_{args.label}.jsonl"
-    if output.exists():
-        print(f"Refusing to overwrite {output.relative_to(ROOT)}", file=sys.stderr)
+    report = ROOT / "results" / f"retry_scenario_{args.label}.md"
+    existing = [path for path in (output, report) if path.exists()]
+    if existing:
+        names = ", ".join(str(path.relative_to(ROOT)) for path in existing)
+        print(f"Refusing to overwrite {names}", file=sys.stderr)
         return 2
 
     import app
@@ -73,27 +78,74 @@ def main() -> int:
     client = SimpleNamespace(models=models)
     logger = observability.JsonlRequestLogger(output)
 
-    print("SIMULATED SCENARIO: no Gemini request and no live retrieval will run.")
-    with (
-        patch.object(config, "CACHE_ENABLED", False),
-        patch.object(store, "search", return_value=[result]),
-        patch.object(generate, "_client", client),
-        patch.object(app, "log_request", logger.log_request),
-    ):
-        outcome = app.ask_pipeline("When does the simulated campus office open?")
+    notice = "SIMULATED SCENARIO: no Gemini request and no live retrieval will run."
+    print(notice)
+    retry_console = io.StringIO()
+    with redirect_stderr(retry_console):
+        with (
+            patch.object(config, "CACHE_ENABLED", False),
+            patch.object(store, "search", return_value=[result]),
+            patch.object(generate, "_client", client),
+            patch.object(app, "log_request", logger.log_request),
+        ):
+            outcome = app.ask_pipeline("When does the simulated campus office open?")
     logger.close()
 
     record = json.loads(output.read_text(encoding="utf-8").splitlines()[-1])
+    console_text = retry_console.getvalue()
+    print(console_text, end="", file=sys.stderr)
     print(json.dumps(record, indent=2, ensure_ascii=False))
     print(f"Wrote simulated evidence to {output.relative_to(ROOT)}")
 
-    expected = (
-        outcome["answer"] == "Simulated grounded answer from campus_document.txt."
-        and record["api_attempts"] == 3
-        and record["retry_count"] == 2
-        and record["retry_wait_ms"] >= 3000
-        and record["rate_limit_wait_ms"] == 0
+    metric_fields = (
+        "api_attempts",
+        "retry_count",
+        "retry_wait_ms",
+        "rate_limit_wait_ms",
     )
+    fields_present = all(field in record for field in metric_fields)
+    answer_matches = (
+        outcome["answer"] == "Simulated grounded answer from campus_document.txt."
+    )
+    if args.label == "before":
+        expected = answer_matches and not fields_present
+    else:
+        expected = (
+            answer_matches
+            and record.get("api_attempts") == 3
+            and record.get("retry_count") == 2
+            and record.get("retry_wait_ms", 0) >= 3000
+            and record.get("rate_limit_wait_ms") == 0
+        )
+
+    report_lines = [
+        f"# Controlled retry scenario — {args.label}",
+        "",
+        f"> {notice}",
+        "",
+        "Two synthetic provider `429` responses were followed by one fixed",
+        "successful response. The application's real retry loop and sleeps ran.",
+        "",
+        "## Retry console output",
+        "",
+        "```text",
+        console_text.rstrip(),
+        "```",
+        "",
+        "## Structured JSONL record",
+        "",
+        "```json",
+        json.dumps(record, indent=2, ensure_ascii=False),
+        "```",
+        "",
+        "## Verification",
+        "",
+        f"- Retry metric fields present: `{fields_present}`",
+        f"- Scenario check: `{'MET' if expected else 'MISSED'}`",
+        "",
+    ]
+    report.write_text("\n".join(report_lines), encoding="utf-8")
+    print(f"Wrote simulated report to {report.relative_to(ROOT)}")
     return 0 if expected else 1
 
 

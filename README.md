@@ -668,3 +668,113 @@ measured with `time.perf_counter()` around the actual sleeps. They remain
 request-local, accumulate across retries and terminal failures, and use zero
 for cache hits and relevance-gate refusals. The original baseline JSONL,
 detailed report, measurements, and acceptance criteria remain unchanged.
+
+**The Improvement**
+
+I selected per-request retry and rate-limit observability because the baseline
+could show that a request was slow without explaining why. The change adds
+`api_attempts`, `retry_count`, `retry_wait_ms`, and `rate_limit_wait_ms` to
+each structured record. It does not change retrieval, generation, caching,
+retry behavior, or speed. It makes time already spent waiting visible.
+
+The focused before-and-after comparison used the same controlled scenario in
+both versions: two simulated provider `429` responses, real 1- and 2-second
+backoff sleeps, and one fixed successful response. These are **simulated
+provider responses**, not Gemini results. The before scenario ran from the
+pre-improvement commit `cdb5f6d` in an isolated temporary checkout; no Git
+history was changed. Full records and console output are in the
+[before scenario](results/retry_scenario_before.md) and
+[after scenario](results/retry_scenario_after.md).
+
+| Controlled measurement | Before | After |
+|---|---:|---:|
+| API attempts visible in JSONL | unavailable | 3 |
+| Retry backoff waits visible in JSONL | unavailable | 2 |
+| Measured retry wait | unavailable | 3,008.72 ms |
+| Local rate-limit wait | unavailable | 0.00 ms |
+| Generation duration | 3,010.53 ms | 3,009.19 ms |
+| End-to-end duration | 3,011.14 ms | 3,009.77 ms |
+
+The nearly identical durations are expected: instrumentation did not make the
+retry loop faster. The improvement helped because the after record attributes
+almost the entire generation duration to two measured retry sleeps, while the
+before record contains no retry explanation.
+
+I then ran the complete formal retest with genuine Gemini responses:
+
+```bash
+python run_capstone_eval.py --label after
+```
+
+The retest used the same questions, process boundaries, cache conditions, and
+targets as the baseline. It created 48 separate records and made 39 genuine
+Gemini API attempts, compared with the retry-free expectation of 27. The
+[after report](results/capstone_eval_after.md),
+[machine-readable results](results/capstone_eval_after.json), and
+[raw after JSONL](results/capstone_eval_after.jsonl) are separate from the
+preserved before artifacts.
+
+### Before evaluation
+
+| Criterion | Target in each trial | Trial 1 | Trial 2 | Trial 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Logging completeness | Exactly 3 records for success/refusal/error; all 13 original required fields valid | 3/3; all valid | 3/3; all valid | 3/3; all valid | **MET** |
+| 2. End-to-end latency | At least 4/5 at or below 4,000 ms; all 5 at or below 7,000 ms after warm-up | 5/5; max 1,985.30 ms | 5/5; max 1,753.91 ms | 5/5; max 980.44 ms | **MET** |
+| 3. Token/cache accuracy | 3 fresh generations match session totals; repeated request is a cache hit with 0 new tokens | 2,161 = 2,161; cache 0/0 | 2,164 = 2,164; cache 0/0 | 2,157 = 2,157; cache 0/0 | **MET** |
+| 4. Failure observability | One safe error record; timings retained; canary absent; original exception re-raised | 56.66/0.07/56.75 ms; safe | 65.43/0.08/65.53 ms; safe | 57.40/0.15/57.58 ms; safe | **MET** |
+| 5. Session/request tracking | 4 unique request IDs; stable ID per process; new ID after restart; prior bytes preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | **MET** |
+
+### After evaluation
+
+| Criterion | Target in each trial | Trial 1 | Trial 2 | Trial 3 | Verdict |
+|---|---|---|---|---|---|
+| 1. Logging completeness | Exactly 3 records for success/refusal/error; all 13 original required fields valid | 3/3; extended 17-field schema valid | 3/3; extended 17-field schema valid | 3/3; extended 17-field schema valid | **MET** |
+| 2. End-to-end latency | At least 4/5 at or below 4,000 ms; all 5 at or below 7,000 ms after warm-up | 5/5; max 922.97 ms | 5/5; max 3,688.80 ms | 5/5; max 3,983.78 ms | **MET** |
+| 3. Token/cache accuracy | 3 fresh generations match session totals; repeated request is a cache hit with 0 new tokens | 2,160 = 2,160; cache 0/0 | First request exhausted retries; logged sum 1,407 vs session 2,154; repeat was not cached | 2,155 = 2,155; cache 0/0 | **MISSED** |
+| 4. Failure observability | One safe error record; timings retained; canary absent; original exception re-raised | 53.14/0.06/53.20 ms; safe | 59.32/0.07/59.40 ms; safe | 58.32/0.05/58.38 ms; safe | **MET** |
+| 5. Session/request tracking | 4 unique request IDs; stable ID per process; new ID after restart; prior bytes preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | **MET** |
+
+Representative actual after evidence for every criterion is preserved in the
+raw JSONL file:
+
+- **Criterion 1:** lines 2–4, 18–20, and 34–36 each contain exactly one
+  `success`, `refused`, and `error` record. Every record includes all original
+  required fields plus the four retry-observability fields.
+- **Criterion 2:** the scored end-to-end durations were 698.32, 922.97,
+  594.35, 633.83, and 716.21 ms in Trial 1; 722.80, 854.67, 856.29,
+  766.31, and 3,688.80 ms in Trial 2; and 2,006.66, 3,983.78, 506.05,
+  579.54, and 822.23 ms in Trial 3.
+- **Criterion 3:** line 25 records an exhausted request with
+  `api_attempts: 4`, `retry_count: 4`, `retry_wait_ms: 15013.23`, and no
+  token counts. Because it produced no cached response, line 28 is another
+  live request (`cache_hit: false`) rather than the required zero-token cache
+  hit. Trials 1 and 3 have valid cache-hit records on lines 12 and 44.
+- **Criterion 4:** lines 4, 20, and 36 contain safe
+  `ControlledGenerationError` records, measured stage timings, no raw canary,
+  and zero API attempts because the controlled exception occurs before the
+  provider call.
+- **Criterion 5:** lines 13–16, 29–32, and 45–48 contain four unique request
+  IDs per trial. The session pairs were
+  `09bd5cf6-8335-48d5-b490-86c058d50243` / `dff22aff-3b0e-4ea3-ac7f-f6161e8095e7`,
+  `6c55cad8-62a1-463b-82d5-8f067ac54ac8` / `57e99932-0abf-4d5d-b902-09c63f533969`,
+  and `55542112-fa78-428d-91e1-f6f0a682f3a4` / `73dd957a-f5bb-4c3f-a54c-6d46ca862410`.
+
+The improvement also helped on genuine Gemini traffic. Six after records
+captured provider retry waits that previously would have been hidden. Line 24
+completed successfully after 3 API attempts, 2 retry waits, and 3,005.66 ms
+of measured backoff within its 3,688.80 ms total duration. Across the full
+after run, the JSONL records contain 39 API attempts, 12 provider-triggered
+backoff waits, 26,038.37 ms of measured retry waiting, and no proactive local
+rate-limit waiting.
+
+The formal retest therefore found one missed criterion, not a clean sweep.
+Criterion 3 Trial 2 failed because provider pushback exhausted the first
+request's retries, so no response existed to cache. This is not evidence that
+retry instrumentation made generation slower or broke caching; it is a real
+provider-dependent failure that the new instrumentation now makes directly
+diagnosable. The remaining limitations are that retry classification still
+uses the existing provider-message checks, local rate limiting is per process,
+and these measurements cover one machine, network, and evaluation window. The
+preserved retry loop also sleeps after every rate-limit response, including
+the final exhausted attempt, so an exhausted request such as line 25 can have
+the same retry-wait count as API-attempt count.

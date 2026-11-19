@@ -558,7 +558,7 @@ def trial_summary(number: str, trial: dict[str, Any]) -> str:
 
 def write_markdown_report(result: dict[str, Any], path: Path) -> None:
     lines = [
-        f"# Capstone baseline evaluation — {result['label']}",
+        f"# Capstone evaluation — {result['label']}",
         "",
         f"- Started: {result['started_at']}",
         f"- Finished: {result['finished_at']}",
