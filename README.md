@@ -460,58 +460,50 @@ complete boundaries across the corpus.
 
 **What This Extends**
 
-This capstone extends The Unofficial Guide, the RAG question-answering system
-built in Units 1 and 2. The existing application loads and chunks the
-`campus_life` corpus, embeds and stores its documents in Chroma, combines
-semantic retrieval with BM25/RRF reranking, applies a relevance gate, and uses
-Gemini to produce grounded answers with source filenames. For Unit 9, I am
-adding an operational layer that records structured JSONL logs for question
-requests, measures end-to-end and individual pipeline-stage timing, captures
-usage measurements, and records successful, refused, and failed runs.
+This capstone adds observability to The Unofficial Guide, the RAG system built
+in Units 1 and 2. The existing application chunks and embeds the `campus_life`
+corpus in Chroma, combines semantic retrieval with BM25/RRF reranking, applies
+a relevance gate, and uses Gemini for grounded, source-cited answers. Unit 9
+adds structured JSONL records for successful, refused, and failed requests,
+including stage timing and usage measurements.
 
 **The Shape**
 
 I chose Shape A, Deploy and Instrument, using Path B, Local with Logs. The
-system will run locally using documented commands,
-and real sessions will leave persistent structured records that can
-be inspected after the process exits. This unit is limited to making the
-existing RAG pipeline reproducible and observable; it does not change how the
-system decides or generates an answer.
-
-Out of scope are changes to semantic retrieval, BM25/RRF reranking, document
-chunking, embeddings, the relevance threshold, Gemini model configuration,
-and the existing rate-limiting behavior. I am also not adding Docker, cloud
-hosting, or a new user interface. Keeping those areas unchanged makes it
-possible to attribute the capstone results to the new run path,
-instrumentation, and measurement layer rather than to a different RAG system.
+documented local application now leaves persistent, inspectable records after
+each session. The scope is reproducibility and observability only. Semantic
+retrieval, BM25/RRF, chunking, embeddings, the relevance threshold, Gemini
+configuration, rate-limiting behavior, Docker/cloud hosting, and a new UI are
+out of scope. This keeps the results attributable to instrumentation rather
+than changes to the RAG system itself.
 
 **Running It**
 
-The primary run path is the local command-line application. Complete clean
-setup, indexing, question, logging, cache, testing, troubleshooting, and
-optional Flask instructions are in [RUNNING.md](RUNNING.md).
+The CLI is the primary run path. Clean setup, indexing, questions, logging,
+caching, tests, troubleshooting, and optional Flask instructions are in
+[RUNNING.md](RUNNING.md).
+
+Final clean-checkout verification is **incomplete**. On November 19, 2026, a
+temporary clone of commit `0e05d8b` used a fresh Python 3.12.15 environment,
+installed the pinned requirements, and passed all 22 tests. Indexing did not
+complete because ONNX/CoreML failed while compiling the embedding model in the
+managed macOS environment; no Chroma collection was created. Runs from the
+original workspace prove execution but do not replace this missing check.
 
 
 **Instrumentation**
 
-These preliminary execution records came from the local CLI on November 18,
-2026, using the existing `campus_life__default` Chroma index. The first ten
-records are genuine in-scope Gemini requests run in one process with
-`AI201_CACHE=0`. The next two records repeat one question with normal caching
-enabled: the first reached Gemini and the second was served from the response
-cache. The following record is an out-of-scope relevance-gate refusal. The
-final record is a controlled failure produced by requesting the nonexistent
-`capstone_missing` index variant.
+These records came from the local CLI on November 18, 2026, using the
+`campus_life__default` index. Records 1–10 are genuine uncached (`AI201_CACHE=0`)
+Gemini requests; 11–12 demonstrate a cache miss then hit; 13 is a relevance
+refusal; and 14 is a controlled missing-index failure. They were copied
+unchanged from the ignored `logs/rag_runs.jsonl` file.
 
-Each JSONL object was copied without changing its measured values from the
-ignored local file `logs/rag_runs.jsonl`. `session_id` identifies the
-application process and `request_id` identifies one question. The three
-millisecond fields measure retrieval, generation, and the complete pipeline.
-The token fields report newly consumed Gemini tokens; a cache hit therefore
-uses zero, while a refusal never reaches generation and has
-`cache_hit: null`. `error` contains only a safe type and message. These are
-reproducibility and instrumentation checks, not the formal capstone evaluation
-or final cost calculation.
+`session_id` identifies a process and `request_id` a question. The timing
+fields cover retrieval, generation, and the whole pipeline; token fields show
+new Gemini usage, so cache hits use zero and refusals use `cache_hit: null`.
+`error` contains a safe type and message. These are preliminary checks, not
+the formal evaluation.
 
 ```jsonl
 {"timestamp": "2026-11-18T20:05:13.547Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "9c83db61-fd6c-4732-be7d-e2d8c2eecdd6", "question": "How are juniors and seniors ranked in the housing lottery?", "answer": "Juniors and seniors in the housing lottery are ordered by accumulated credit hours first, with a random tie-break used only when necessary (admin_housing_lottery.txt).", "status": "success", "retrieval_ms": 2372.178375000658, "generation_ms": 2014.8454589980247, "duration_ms": 4388.563374999649, "prompt_tokens": 719, "output_tokens": 36, "cache_hit": false, "error": null}
@@ -532,12 +524,10 @@ or final cost calculation.
 
 **What It Costs**
 
-I use measured token consumption as the primary operational cost metric. These
-measurements come from the ten real, in-scope requests in the first evidence
-session above, all run with `AI201_CACHE=0`. Prompt and output token counts came
-from Gemini's response metadata for each request. Retrieval, generation, and
-end-to-end durations were measured with `time.perf_counter()` and recorded in
-milliseconds by the instrumented pipeline.
+Measured token consumption is the primary operational cost metric. The ten
+real, in-scope requests above ran with `AI201_CACHE=0`; token counts came from
+Gemini response metadata and `time.perf_counter()` measured the three latency
+values.
 
 | Measurement | Result |
 |---|---:|
@@ -554,18 +544,25 @@ milliseconds by the instrumented pipeline.
 | Minimum end-to-end latency | 625.32 ms |
 | Maximum end-to-end latency | 5,469.41 ms |
 
-The separate cache demonstration, relevance-gate refusal, and controlled error
-were excluded because they did not represent uncached, successful Gemini
-requests. No dollar amount is estimated here; the reported cost is the actual
-token consumption returned by Gemini.
+The cache example, refusal, and error are excluded because they are not
+successful uncached calls. No dollar estimate is made. The first request's
+2,372.18 ms retrieval cold start remains in the average; the other nine ranged
+from 72.34–291.08 ms, so a warm-only average would be lower. Generation also
+varied, and the slowest overall request was not the first.
 
-The first request also included observable cold-start retrieval overhead. Its
-retrieval stage took 2,372.18 ms, while the remaining nine retrieval stages
-ranged from 72.34 ms to 291.08 ms. That first request remains in the averages
-because it was part of the real ten-request session, but it makes the retrieval
-and end-to-end averages higher than a fully warmed session would be. Generation
-latency also varied between requests, and the maximum end-to-end request was
-not the first request.
+For planning, 100 daily users making one comparable successful uncached request
+each would project to:
+
+| Projected measurement | Calculation | Result |
+|---|---:|---:|
+| Prompt tokens per day | 621.1 × 100 | 62,110 |
+| Output tokens per day | 38.4 × 100 | 3,840 |
+| Combined reported tokens per day | 659.5 × 100 | **65,950** |
+
+This is not measured daily usage. It assumes the ten-request token profile and
+excludes cache hits, refusals, failures, retries without returned metadata,
+local embedding work, and changes in question mix or prompt size. The small
+sample supports rough capacity planning, not a usage or billing forecast.
 
 **Run Log and Verdicts**
 
@@ -575,18 +572,16 @@ I ran the Milestone 5 baseline with:
 python run_capstone_eval.py --label before
 ```
 
-The evaluator ran every capstone criterion in three independent trials. Each
-latency trial used a fresh process, one unscored uncached warm-up, and five
-genuine uncached Gemini requests. Each cache trial used another fresh process,
-an empty isolated cache, three genuine cache misses, and one immediate repeat.
-The tracking trials used two sequential fresh processes and refusal requests,
-which require no Gemini call. The failure trials performed real retrieval and
-then injected a client exception containing a synthetic canary; no mocked
-answer was treated as real execution evidence.
+Each criterion ran in three independent trials. Latency trials used a fresh
+process, one unscored uncached warm-up, and five genuine uncached Gemini calls.
+Cache trials used a fresh process and empty cache for three misses and one
+repeat. Tracking trials used refusals across two processes. Failure trials did
+real retrieval, then injected a canary-bearing client exception; no mocked
+answer counted as real evidence.
 
-The run produced 48 isolated records without changing the older preliminary
-log. It made 30 Gemini model attempts: 27 expected response-generating calls
-and three provider-requested retries. The full evidence is preserved in the
+The run produced 48 isolated records and 30 Gemini attempts: 27 expected calls
+and three provider-requested retries. Earlier logs were unchanged. Evidence is
+preserved in the
 [detailed report](results/capstone_eval_before.md),
 [machine-readable verdicts](results/capstone_eval_before.json), and
 [raw JSONL records](results/capstone_eval_before.jsonl).
@@ -605,14 +600,12 @@ The complete scored latency values were:
 - Trial 2: 1,753.91, 774.40, 1,668.03, 793.91, and 714.05 ms.
 - Trial 3: 840.96, 756.22, 782.26, 980.44, and 790.88 ms.
 
-Real output for Criterion 1 is on JSONL lines 2–4, 18–20, and 34–36: each
-set contains one complete success, refusal, and error record. Criterion 2 uses
-the five uncached success records identified in each trial's detailed report.
-Criterion 3 uses lines 9–12, 25–28, and 41–44; every fourth record has
-`cache_hit: true` and zero newly consumed tokens. Criterion 4 uses lines 4, 20,
-and 36, which contain `ControlledGenerationError`, the safe message, measured
-timings, and no canary. Criterion 5 uses lines 13–16, 29–32, and 45–48. The
-process session pairs were:
+Representative output: Criterion 1 uses JSONL lines 2–4, 18–20, and 34–36
+(complete success/refusal/error sets). Criterion 2 uses each report's five
+uncached successes. Criterion 3 uses lines 9–12, 25–28, and 41–44, whose fourth
+records are zero-token cache hits. Criterion 4 uses safe, timed, canary-free
+`ControlledGenerationError` records on lines 4, 20, and 36. Criterion 5 uses
+lines 13–16, 29–32, and 45–48, with session pairs:
 
 - Trial 1: `4ea4e816-e2bd-49bf-9433-9019b4825881` and
   `5733df89-c3d0-4439-a854-553baf858b9a`.
@@ -621,68 +614,43 @@ process session pairs were:
 - Trial 3: `31206727-bf9c-4775-aebe-92cb77015094` and
   `1110ce46-0813-4f99-82d6-f13ec3f4da99`.
 
-Each evidence value has one responsible application function. Logging
-completeness comes from `app.py::ask_pipeline` and
-`observability.py::JsonlRequestLogger.log_request`. Latency comes from
-`app.py::ask_pipeline`, which measures with `time.perf_counter()`. Token and
-cache evidence comes from `generate.py::generate`, `_record_tokens`,
-`request_usage`, and `token_counts`. Safe failure evidence comes from
-`app.py::ask_pipeline` and `observability.py::safe_error`. Session and request
-IDs come from `observability.py::SESSION_ID`, `new_request_id`, and the
-append-only `JsonlRequestLogger.log_request` method. The evaluator that
-collected, validated, and summarized those records is
-`run_capstone_eval.py::parent_main`.
+Evidence sources: `app.py::ask_pipeline` and
+`observability.py::JsonlRequestLogger.log_request` produce complete timed
+records; `generate.py::generate`, `_record_tokens`, `request_usage`, and
+`token_counts` supply token/cache data; `observability.py::safe_error` sanitizes
+failures; `SESSION_ID` and `new_request_id` supply IDs; and
+`run_capstone_eval.py::parent_main` collects and validates the results.
 
-The baseline also exposed limitations worth keeping visible. The provider
-requested three retries during the second cache trial even though each process
-was below the local rate-limit setting. The unscored warm-ups took 3,649.66,
-2,732.64, and 2,734.53 ms, confirming that the scored warm condition does not
-represent cold-start performance. The controlled failures occurred
-immediately before the provider call, so their very small generation timings
-test error recording and redaction rather than a slow provider timeout. These
-results also describe one machine, model configuration, and evaluation date;
-they do not establish performance on every computer or network.
+Baseline limits: the provider requested three retries despite each process
+remaining below its local limit. Warm-ups took 3,649.66, 2,732.64, and 2,734.53
+ms, so scored warm performance excludes cold starts. Controlled failures occur
+immediately before the provider call, testing recording/redaction rather than
+a slow timeout. Results cover one machine, model configuration, and date.
 
 **Baseline Diagnosis**
 
-All five acceptance criteria passed in all three baseline trials, but the run
-still revealed an observability gap that those criteria did not measure.
-Record 25 in `results/capstone_eval_before.jsonl` took 12,490.39 ms end to end,
-including 10,969.39 ms in generation. Its request record showed only the final
-latency, token counts, and `cache_hit: false`. It did not say how many Gemini
-calls were attempted or how much of the generation time was waiting.
+All five baseline criteria passed, but record 25 in
+`results/capstone_eval_before.jsonl` exposed a gap: its 12,490.39 ms total and
+10,969.39 ms generation time did not reveal the three provider retries or
+1-, 2-, and 4-second backoffs recorded separately by the evaluator. Criterion
+2 did not catch this cache-trial record, and the other criteria did not test
+retry detail. Passing therefore did not mean every slow request was explained.
 
-The separate evaluator diagnostics for the same request recorded three
-provider-triggered retries with requested exponential backoffs of 1, 2, and 4
-seconds. That explains at least seven seconds of the slow generation, but a
-reader looking only at the structured request log could not distinguish retry
-waiting from model response time. Criterion 2 did not expose this because
-record 25 belonged to the explicit cache trial rather than the five scored
-latency requests. The other criteria checked record completeness, token/cache
-accuracy, safe failures, and identifiers, not retry-level detail. Passing all
-five therefore did not mean the log explained every slow request.
-
-Milestone 6.1 addresses only this gap. New request records add `api_attempts`,
-`retry_count`, `retry_wait_ms`, and `rate_limit_wait_ms`. The wait values are
-measured with `time.perf_counter()` around the actual sleeps. They remain
-request-local, accumulate across retries and terminal failures, and use zero
-for cache hits and relevance-gate refusals. The original baseline JSONL,
-detailed report, measurements, and acceptance criteria remain unchanged.
+Milestone 6.1 added request-local `api_attempts`, `retry_count`,
+`retry_wait_ms`, and `rate_limit_wait_ms`. Waits use `time.perf_counter()`,
+accumulate through terminal failures, and are zero for cache hits and refusals.
+The baseline evidence and criteria remain unchanged.
 
 **The Improvement**
 
-I selected per-request retry and rate-limit observability because the baseline
-could show that a request was slow without explaining why. The change adds
-`api_attempts`, `retry_count`, `retry_wait_ms`, and `rate_limit_wait_ms` to
-each structured record. It does not change retrieval, generation, caching,
-retry behavior, or speed. It makes time already spent waiting visible.
+I selected retry and rate-limit observability so slow requests explain their
+waiting time. The four new fields do not change retrieval, generation,
+caching, retries, or speed.
 
-The focused before-and-after comparison used the same controlled scenario in
-both versions: two simulated provider `429` responses, real 1- and 2-second
-backoff sleeps, and one fixed successful response. These are **simulated
-provider responses**, not Gemini results. The before scenario ran from the
-pre-improvement commit `cdb5f6d` in an isolated temporary checkout; no Git
-history was changed. Full records and console output are in the
+The controlled comparison used two simulated provider `429`s, real 1- and
+2-second sleeps, and a fixed success. These are **simulated provider responses,
+not Gemini results**. The before case used commit `cdb5f6d` in an isolated
+checkout without changing history. Full evidence is in the
 [before scenario](results/retry_scenario_before.md) and
 [after scenario](results/retry_scenario_after.md).
 
@@ -695,10 +663,9 @@ history was changed. Full records and console output are in the
 | Generation duration | 3,010.53 ms | 3,009.19 ms |
 | End-to-end duration | 3,011.14 ms | 3,009.77 ms |
 
-The nearly identical durations are expected: instrumentation did not make the
-retry loop faster. The improvement helped because the after record attributes
-almost the entire generation duration to two measured retry sleeps, while the
-before record contains no retry explanation.
+The similar durations confirm that this change improves explanation, not
+speed: the after record attributes almost all generation time to two sleeps;
+the before record cannot.
 
 I then ran the complete formal retest with genuine Gemini responses:
 
@@ -706,9 +673,9 @@ I then ran the complete formal retest with genuine Gemini responses:
 python run_capstone_eval.py --label after
 ```
 
-The retest used the same questions, process boundaries, cache conditions, and
-targets as the baseline. It created 48 separate records and made 39 genuine
-Gemini API attempts, compared with the retry-free expectation of 27. The
+The retest reused the baseline's questions, process/cache conditions, and
+targets. It created 48 records and made 39 genuine Gemini attempts versus 27
+without retries. The
 [after report](results/capstone_eval_after.md),
 [machine-readable results](results/capstone_eval_after.json), and
 [raw after JSONL](results/capstone_eval_after.jsonl) are separate from the
@@ -759,22 +726,51 @@ raw JSONL file:
   `6c55cad8-62a1-463b-82d5-8f067ac54ac8` / `57e99932-0abf-4d5d-b902-09c63f533969`,
   and `55542112-fa78-428d-91e1-f6f0a682f3a4` / `73dd957a-f5bb-4c3f-a54c-6d46ca862410`.
 
-The improvement also helped on genuine Gemini traffic. Six after records
-captured provider retry waits that previously would have been hidden. Line 24
-completed successfully after 3 API attempts, 2 retry waits, and 3,005.66 ms
-of measured backoff within its 3,688.80 ms total duration. Across the full
-after run, the JSONL records contain 39 API attempts, 12 provider-triggered
-backoff waits, 26,038.37 ms of measured retry waiting, and no proactive local
-rate-limit waiting.
+Six genuine-Gemini records now expose waits previously hidden. Line 24
+succeeded after 3 attempts, 2 retries, and 3,005.66 ms of backoff within
+3,688.80 ms total. Overall: 39 attempts, 12 backoffs, 26,038.37 ms retry wait,
+and no proactive local rate-limit wait. The retest missed Criterion 3 Trial 2
+after provider pushback exhausted cache seeding; details and remaining limits
+follow.
 
-The formal retest therefore found one missed criterion, not a clean sweep.
-Criterion 3 Trial 2 failed because provider pushback exhausted the first
-request's retries, so no response existed to cache. This is not evidence that
-retry instrumentation made generation slower or broke caching; it is a real
-provider-dependent failure that the new instrumentation now makes directly
-diagnosable. The remaining limitations are that retry classification still
-uses the existing provider-message checks, local rate limiting is per process,
-and these measurements cover one machine, network, and evaluation window. The
-preserved retry loop also sleeps after every rate-limit response, including
-the final exhausted attempt, so an exhausted request such as line 25 can have
-the same retry-wait count as API-attempt count.
+**What's Still Broken**
+
+Criterion 3 remained **MISSED** because provider rate limiting exhausted all
+four attempts on Trial 2's first cache-seeding request. Without a successful
+response, nothing could be cached, so the repeat required live generation
+instead of a zero-token cache hit.
+
+This does not by itself indicate broken accounting or caching. With no Gemini
+response metadata, the failure correctly logged unknown tokens; later calls
+were counted, and both other trials produced correct cache hits. The external
+failure prevented the successful seed required to test the cache.
+
+Several limitations remain:
+
+- Rate limiting is process-local, so separate workers do not coordinate even
+  though the provider sees one account.
+- Retry classification searches provider messages for `429`,
+  `resource exhausted`, or `rate limit`, so message changes may misclassify.
+- Network conditions, shared quotas, and provider behavior make results vary.
+- The retry loop sleeps after the last failed attempt, adding an unnecessary
+  8 seconds in the missed trial.
+
+I stopped after completing the bounded build-test-diagnose-improve-retest
+cycle. Rate-limit or retry-policy changes alter behavior and deserve a new
+design/evaluation cycle. The first future improvement should be coordinated
+cross-process limiting, such as a shared token bucket or request queue, so CLI,
+Flask, and evaluation workers share one provider budget.
+
+**How I Used AI**
+
+1. AI inspected the RAG pipeline and implemented JSONL logging, timings,
+   request-local token/cache/retry metrics, and isolated tests. I chose the
+   architecture and scope—Shape A, local logs, unchanged RAG behavior, and
+   append-only safe records—and reviewed each milestone.
+
+2. AI built the evaluator, aggregated evidence, calculated measurements,
+   diagnosed hidden retry time, helped draft the five criteria I approved, and
+   implemented my selected retry-observability improvement and simulation. I
+   set the targets and constraints, reviewed evidence, selected the
+   improvement, and retained the missed result without changing or rerunning
+   its target.
