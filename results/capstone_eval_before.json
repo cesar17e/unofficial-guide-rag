@@ -1,0 +1,970 @@
+{
+  "schema_version": 1,
+  "label": "before",
+  "started_at": "2026-11-18T20:29:40Z",
+  "finished_at": "2026-11-18T20:30:49Z",
+  "environment": {
+    "python": "3.12.15",
+    "model": "gemini-3.5-flash-lite",
+    "embedding_model": "all-MiniLM-L6-v2",
+    "corpus": "campus_life",
+    "index_variant": "default"
+  },
+  "methodology": {
+    "trials": 3,
+    "latency_condition": "one unscored uncached warm-up, then five genuine uncached questions per fresh process",
+    "cache_condition": "three genuine cache misses and one immediate repeat in an empty isolated cache per fresh process",
+    "failure_condition": "real retrieval followed by an injected client exception; no mocked answer",
+    "tracking_condition": "two refusal requests in each of two sequential fresh processes",
+    "old_logs_untouched": true
+  },
+  "api_usage": {
+    "model_attempts": 30,
+    "expected_without_provider_retries": 27
+  },
+  "files": {
+    "raw_jsonl": "results/capstone_eval_before.jsonl",
+    "json": "results/capstone_eval_before.json",
+    "markdown": "results/capstone_eval_before.md"
+  },
+  "criteria": {
+    "1": {
+      "name": "Logging completeness",
+      "producer": "app.py::ask_pipeline and observability.py::JsonlRequestLogger.log_request",
+      "trials": [
+        {
+          "passed": true,
+          "records_added": 3,
+          "line_numbers": [
+            2,
+            3,
+            4
+          ],
+          "statuses": [
+            "success",
+            "refused",
+            "error"
+          ],
+          "schema_valid": [
+            true,
+            true,
+            true
+          ],
+          "request_ids": [
+            "5e8f4709-e48e-43ec-a3f3-18b9472a870f",
+            "11a59355-5d8c-4cff-ad0e-385abd3ba8d5",
+            "68f25ae0-3b36-47b0-8a23-396456889e38"
+          ]
+        },
+        {
+          "passed": true,
+          "records_added": 3,
+          "line_numbers": [
+            18,
+            19,
+            20
+          ],
+          "statuses": [
+            "success",
+            "refused",
+            "error"
+          ],
+          "schema_valid": [
+            true,
+            true,
+            true
+          ],
+          "request_ids": [
+            "b3450a64-b234-4aaf-9353-98c46ef8e44f",
+            "1376e949-a9cc-4ad0-a645-422a61bdabc7",
+            "00bdf6f7-e293-42b8-952f-316ae7585990"
+          ]
+        },
+        {
+          "passed": true,
+          "records_added": 3,
+          "line_numbers": [
+            34,
+            35,
+            36
+          ],
+          "statuses": [
+            "success",
+            "refused",
+            "error"
+          ],
+          "schema_valid": [
+            true,
+            true,
+            true
+          ],
+          "request_ids": [
+            "48cf5d40-8245-4bf8-b3c9-4019ac9f3e2a",
+            "78083a49-6dde-487d-b78f-98202b22ef0b",
+            "f28fd3ab-5770-443d-8ec1-d81c4d08e113"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    "2": {
+      "name": "End-to-end latency",
+      "producer": "app.py::ask_pipeline using time.perf_counter",
+      "trials": [
+        {
+          "passed": true,
+          "warmup_valid": true,
+          "warmup_duration_ms": 3649.6618329983903,
+          "line_numbers": [
+            2,
+            5,
+            6,
+            7,
+            8
+          ],
+          "durations_ms": [
+            811.7266250010289,
+            1985.2962919976562,
+            1252.2884580030222,
+            837.8226670029107,
+            1749.600167000608
+          ],
+          "within_4000_ms": 5,
+          "maximum_ms": 1985.2962919976562,
+          "all_successful_uncached": true
+        },
+        {
+          "passed": true,
+          "warmup_valid": true,
+          "warmup_duration_ms": 2732.6385419983126,
+          "line_numbers": [
+            18,
+            21,
+            22,
+            23,
+            24
+          ],
+          "durations_ms": [
+            1753.9140839980973,
+            774.4030409994593,
+            1668.0345839995425,
+            793.9102080017619,
+            714.0470829981496
+          ],
+          "within_4000_ms": 5,
+          "maximum_ms": 1753.9140839980973,
+          "all_successful_uncached": true
+        },
+        {
+          "passed": true,
+          "warmup_valid": true,
+          "warmup_duration_ms": 2734.530208999786,
+          "line_numbers": [
+            34,
+            37,
+            38,
+            39,
+            40
+          ],
+          "durations_ms": [
+            840.9585420013173,
+            756.2168330005079,
+            782.259832998534,
+            980.4421670014563,
+            790.8786660009355
+          ],
+          "within_4000_ms": 5,
+          "maximum_ms": 980.4421670014563,
+          "all_successful_uncached": true
+        }
+      ],
+      "passed": true
+    },
+    "3": {
+      "name": "Token accounting and cache accuracy",
+      "producer": "generate.py::generate, _record_tokens, request_usage, and token_counts",
+      "trials": [
+        {
+          "passed": true,
+          "line_numbers": [
+            9,
+            10,
+            11,
+            12
+          ],
+          "fresh_prompt_tokens": [
+            719,
+            630,
+            694
+          ],
+          "fresh_output_tokens": [
+            28,
+            50,
+            40
+          ],
+          "per_request_sum": {
+            "prompt": 2043,
+            "output": 118,
+            "total": 2161
+          },
+          "session_totals": {
+            "prompt": 2043,
+            "output": 118,
+            "total": 2161
+          },
+          "cache_record": {
+            "cache_hit": true,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          },
+          "session_totals_unchanged": true,
+          "fresh_valid": true,
+          "totals_match": true
+        },
+        {
+          "passed": true,
+          "line_numbers": [
+            25,
+            26,
+            27,
+            28
+          ],
+          "fresh_prompt_tokens": [
+            719,
+            630,
+            694
+          ],
+          "fresh_output_tokens": [
+            35,
+            46,
+            40
+          ],
+          "per_request_sum": {
+            "prompt": 2043,
+            "output": 121,
+            "total": 2164
+          },
+          "session_totals": {
+            "prompt": 2043,
+            "output": 121,
+            "total": 2164
+          },
+          "cache_record": {
+            "cache_hit": true,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          },
+          "session_totals_unchanged": true,
+          "fresh_valid": true,
+          "totals_match": true
+        },
+        {
+          "passed": true,
+          "line_numbers": [
+            41,
+            42,
+            43,
+            44
+          ],
+          "fresh_prompt_tokens": [
+            719,
+            630,
+            694
+          ],
+          "fresh_output_tokens": [
+            33,
+            45,
+            36
+          ],
+          "per_request_sum": {
+            "prompt": 2043,
+            "output": 114,
+            "total": 2157
+          },
+          "session_totals": {
+            "prompt": 2043,
+            "output": 114,
+            "total": 2157
+          },
+          "cache_record": {
+            "cache_hit": true,
+            "prompt_tokens": 0,
+            "output_tokens": 0
+          },
+          "session_totals_unchanged": true,
+          "fresh_valid": true,
+          "totals_match": true
+        }
+      ],
+      "passed": true
+    },
+    "4": {
+      "name": "Failure observability",
+      "producer": "app.py::ask_pipeline and observability.py::safe_error",
+      "trials": [
+        {
+          "passed": true,
+          "line_number": 4,
+          "error": {
+            "type": "ControlledGenerationError",
+            "message": "The question could not be completed."
+          },
+          "retrieval_ms": 56.66458300038357,
+          "generation_ms": 0.07145899871829897,
+          "duration_ms": 56.74850000286824,
+          "known_usage": {
+            "prompt_tokens": null,
+            "output_tokens": null,
+            "cache_hit": false
+          },
+          "canary_absent": true,
+          "original_exception_reraised": true
+        },
+        {
+          "passed": true,
+          "line_number": 20,
+          "error": {
+            "type": "ControlledGenerationError",
+            "message": "The question could not be completed."
+          },
+          "retrieval_ms": 65.43254200005322,
+          "generation_ms": 0.08108299880404957,
+          "duration_ms": 65.52575000023353,
+          "known_usage": {
+            "prompt_tokens": null,
+            "output_tokens": null,
+            "cache_hit": false
+          },
+          "canary_absent": true,
+          "original_exception_reraised": true
+        },
+        {
+          "passed": true,
+          "line_number": 36,
+          "error": {
+            "type": "ControlledGenerationError",
+            "message": "The question could not be completed."
+          },
+          "retrieval_ms": 57.401958998525515,
+          "generation_ms": 0.14554200242855586,
+          "duration_ms": 57.57850000009057,
+          "known_usage": {
+            "prompt_tokens": null,
+            "output_tokens": null,
+            "cache_hit": false
+          },
+          "canary_absent": true,
+          "original_exception_reraised": true
+        }
+      ],
+      "passed": true
+    },
+    "5": {
+      "name": "Session and request tracking",
+      "producer": "observability.py::SESSION_ID, new_request_id, and JsonlRequestLogger.log_request",
+      "trials": [
+        {
+          "passed": true,
+          "line_numbers": [
+            13,
+            14,
+            15,
+            16
+          ],
+          "records_added": 4,
+          "prefix_preserved": true,
+          "process_a_session_id": "4ea4e816-e2bd-49bf-9433-9019b4825881",
+          "process_b_session_id": "5733df89-c3d0-4439-a854-553baf858b9a",
+          "request_ids": [
+            "88d0b7b8-924d-4e4e-8b21-f878c542264a",
+            "daa484b6-64c9-4bdf-8600-6f944aabc57b",
+            "e78f09b2-7443-45fa-bc06-a1fc0cb6f11a",
+            "5daf6f1c-9862-4d22-8735-af6007582512"
+          ],
+          "request_ids_unique": true
+        },
+        {
+          "passed": true,
+          "line_numbers": [
+            29,
+            30,
+            31,
+            32
+          ],
+          "records_added": 4,
+          "prefix_preserved": true,
+          "process_a_session_id": "7df3eb73-b15e-45ac-99ba-f5bf96c5bcb9",
+          "process_b_session_id": "8508c255-97fe-4ccc-8807-fc243ae7faeb",
+          "request_ids": [
+            "b6505d21-bff4-48b7-a18a-74e6a8016fd5",
+            "37b3b9e5-e6b4-454d-bd65-b64cac7d9272",
+            "74571330-90f5-47f1-bffd-b35f0366329e",
+            "97bc2eb8-15c4-4779-a532-026f36a53596"
+          ],
+          "request_ids_unique": true
+        },
+        {
+          "passed": true,
+          "line_numbers": [
+            45,
+            46,
+            47,
+            48
+          ],
+          "records_added": 4,
+          "prefix_preserved": true,
+          "process_a_session_id": "31206727-bf9c-4775-aebe-92cb77015094",
+          "process_b_session_id": "1110ce46-0813-4f99-82d6-f13ec3f4da99",
+          "request_ids": [
+            "871dda9c-bc65-4575-8877-c898939a7b28",
+            "8570460f-c7d2-4e8b-8099-fbc3715052d0",
+            "7890c41b-0d23-4b17-895a-a70f4cf4f173",
+            "6eac3c09-7078-4511-ae92-308333a2a23a"
+          ],
+          "request_ids_unique": true
+        }
+      ],
+      "passed": true
+    }
+  },
+  "worker_runs": [
+    {
+      "kind": "core",
+      "trial": 1,
+      "start": 0,
+      "end": 8,
+      "warmup_index": 0,
+      "criterion1_start": 1,
+      "criterion1_end": 4,
+      "latency_indices": [
+        1,
+        4,
+        5,
+        6,
+        7
+      ],
+      "failure_index": 3,
+      "warmup_outcome": {
+        "completed": true,
+        "refused": false,
+        "answer": "Each student gets $30 of printing per semester. (Source: admin_printing_quota.txt)"
+      },
+      "scored_outcomes": [
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, with a random tie-break used only when necessary. \n\nSource: `admin_housing_lottery.txt`"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Yes, both the midterm and the final for CS 340 are open-book (Sources: course_cs_340_exams.txt and course_cs_340.txt)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Halden Hall closes at 7:00pm. \n\nSources: `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "The best time to do laundry in Aldridge Hall is Tuesday or Wednesday morning. \n\nSource: housing_aldridge_hall_laundry.txt (also mentioned in housing_aldridge_hall_laundry.txt)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "It takes 18 minutes on foot to walk from Fenwick Court to central campus. \n\nSources: `transit_walking.txt` and `housing_fenwick_court.txt`"
+        }
+      ],
+      "refusal_outcome": {
+        "completed": true,
+        "refused": true,
+        "answer": "I don't have enough information about that."
+      },
+      "failure": {
+        "canary": "CAPSTONE_PRIVATE_BEFORE_TRIAL_1",
+        "expected_type": "ControlledGenerationError",
+        "caught_type": "ControlledGenerationError",
+        "reraised_same_object": true
+      },
+      "model_attempts": 6,
+      "token_totals": {
+        "prompt": 3931,
+        "output": 229,
+        "total": 4160
+      },
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "cache",
+      "trial": 1,
+      "start": 8,
+      "end": 12,
+      "indices": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, and only tie-break randomly (admin_housing_lottery.txt)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Yes, both the midterm and final for CS 340 are open-book. \n\nSource: `course_cs_340_exams.txt` (also found in `course_cs_340.txt`)"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Halden Hall closes at 7:00pm. \n\nSources: `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, and only tie-break randomly (admin_housing_lottery.txt)."
+        }
+      ],
+      "totals_after_each_request": [
+        {
+          "prompt": 719,
+          "output": 28,
+          "total": 747
+        },
+        {
+          "prompt": 1349,
+          "output": 78,
+          "total": 1427
+        },
+        {
+          "prompt": 2043,
+          "output": 118,
+          "total": 2161
+        },
+        {
+          "prompt": 2043,
+          "output": 118,
+          "total": 2161
+        }
+      ],
+      "model_attempts": 3,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "tracking",
+      "trial": 1,
+      "process_name": "A",
+      "start": 12,
+      "end": 14,
+      "indices": [
+        12,
+        13
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        },
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        }
+      ],
+      "model_attempts": 0,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "tracking",
+      "trial": 1,
+      "process_name": "B",
+      "start": 14,
+      "end": 16,
+      "indices": [
+        14,
+        15
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        },
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        }
+      ],
+      "model_attempts": 0,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "core",
+      "trial": 2,
+      "start": 16,
+      "end": 24,
+      "warmup_index": 16,
+      "criterion1_start": 17,
+      "criterion1_end": 20,
+      "latency_indices": [
+        17,
+        20,
+        21,
+        22,
+        23
+      ],
+      "failure_index": 19,
+      "warmup_outcome": {
+        "completed": true,
+        "refused": false,
+        "answer": "Each student receives $30 of printing per semester. (Source: admin_printing_quota.txt)"
+      },
+      "scored_outcomes": [
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors in the housing lottery are ordered by accumulated credit hours first, with a random tie-break used afterward (admin_housing_lottery.txt)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Yes, both the midterm and the final in CS 340 are open-book (Sources: course_cs_340_exams.txt and course_cs_340.txt)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Halden Hall closes at 7:00pm. \n\nSources: dining_halden_hall.txt, dining_halden_hall_followup.txt"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "The best time to do laundry in Aldridge Hall is Tuesday or Wednesday morning. \n\nSource: housing_aldridge_hall_laundry.txt (also mentioned in housing_aldridge_hall_laundry.txt)"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "It takes 18 minutes on foot to walk from Fenwick Court to central campus. \n\nSource documents: `transit_walking.txt` and `housing_fenwick_court.txt`"
+        }
+      ],
+      "refusal_outcome": {
+        "completed": true,
+        "refused": true,
+        "answer": "I don't have enough information about that."
+      },
+      "failure": {
+        "canary": "CAPSTONE_PRIVATE_BEFORE_TRIAL_2",
+        "expected_type": "ControlledGenerationError",
+        "caught_type": "ControlledGenerationError",
+        "reraised_same_object": true
+      },
+      "model_attempts": 6,
+      "token_totals": {
+        "prompt": 3931,
+        "output": 223,
+        "total": 4154
+      },
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "cache",
+      "trial": 2,
+      "start": 24,
+      "end": 28,
+      "indices": [
+        24,
+        25,
+        26,
+        27
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, and only tie-break randomly in the housing lottery. \n\nSource: admin_housing_lottery.txt"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Yes, both the midterm and the final for CS 340 are open-book (Sources: `course_cs_340_exams.txt` and `course_cs_340.txt`)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Halden Hall closes at 7:00pm. \n\nSources: `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, and only tie-break randomly in the housing lottery. \n\nSource: admin_housing_lottery.txt"
+        }
+      ],
+      "totals_after_each_request": [
+        {
+          "prompt": 719,
+          "output": 35,
+          "total": 754
+        },
+        {
+          "prompt": 1349,
+          "output": 81,
+          "total": 1430
+        },
+        {
+          "prompt": 2043,
+          "output": 121,
+          "total": 2164
+        },
+        {
+          "prompt": 2043,
+          "output": 121,
+          "total": 2164
+        }
+      ],
+      "model_attempts": 6,
+      "worker_stdout": "",
+      "worker_stderr": "  [rate limit] service pushed back. Retrying in 1s (attempt 1 of 4).\n  [rate limit] service pushed back. Retrying in 2s (attempt 2 of 4).\n  [rate limit] service pushed back. Retrying in 4s (attempt 3 of 4).\n"
+    },
+    {
+      "kind": "tracking",
+      "trial": 2,
+      "process_name": "A",
+      "start": 28,
+      "end": 30,
+      "indices": [
+        28,
+        29
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        },
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        }
+      ],
+      "model_attempts": 0,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "tracking",
+      "trial": 2,
+      "process_name": "B",
+      "start": 30,
+      "end": 32,
+      "indices": [
+        30,
+        31
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        },
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        }
+      ],
+      "model_attempts": 0,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "core",
+      "trial": 3,
+      "start": 32,
+      "end": 40,
+      "warmup_index": 32,
+      "criterion1_start": 33,
+      "criterion1_end": 36,
+      "latency_indices": [
+        33,
+        36,
+        37,
+        38,
+        39
+      ],
+      "failure_index": 35,
+      "warmup_outcome": {
+        "completed": true,
+        "refused": false,
+        "answer": "Every student gets $30 of printing per semester. \n\nSource: admin_printing_quota.txt"
+      },
+      "scored_outcomes": [
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, and only tie-break randomly (admin_housing_lottery.txt)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Yes, both the midterm and the final in CS 340 are open-book (Sources: `course_cs_340_exams.txt` and `course_cs_340.txt`)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Halden Hall closes at 7:00pm. \n\nSources: dining_halden_hall.txt and dining_halden_hall_followup.txt"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "The best time to do laundry in Aldridge Hall is Tuesday or Wednesday morning. \n\nSource: housing_aldridge_hall_laundry.txt (also found in housing_aldridge_hall.txt references the laundry costs, but the specific time is detailed in housing_aldridge_hall_laundry.txt)."
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "It takes 18 minutes on foot to walk from Fenwick Court to central campus. \n\nSource documents: `transit_walking.txt` and `housing_fenwick_court.txt`."
+        }
+      ],
+      "refusal_outcome": {
+        "completed": true,
+        "refused": true,
+        "answer": "I don't have enough information about that."
+      },
+      "failure": {
+        "canary": "CAPSTONE_PRIVATE_BEFORE_TRIAL_3",
+        "expected_type": "ControlledGenerationError",
+        "caught_type": "ControlledGenerationError",
+        "reraised_same_object": true
+      },
+      "model_attempts": 6,
+      "token_totals": {
+        "prompt": 3931,
+        "output": 240,
+        "total": 4171
+      },
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "cache",
+      "trial": 3,
+      "start": 40,
+      "end": 44,
+      "indices": [
+        40,
+        41,
+        42,
+        43
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, with ties broken randomly in the housing lottery. \n\nSource: admin_housing_lottery.txt"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Yes, both the midterm and final in CS 340 are open-book. \n\nSource: course_cs_340_exams.txt (and course_cs_340.txt)"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Halden Hall closes at 7:00pm. \n\nSources: dining_halden_hall.txt, dining_halden_hall_followup.txt"
+        },
+        {
+          "completed": true,
+          "refused": false,
+          "answer": "Juniors and seniors are ordered by accumulated credit hours first, with ties broken randomly in the housing lottery. \n\nSource: admin_housing_lottery.txt"
+        }
+      ],
+      "totals_after_each_request": [
+        {
+          "prompt": 719,
+          "output": 33,
+          "total": 752
+        },
+        {
+          "prompt": 1349,
+          "output": 78,
+          "total": 1427
+        },
+        {
+          "prompt": 2043,
+          "output": 114,
+          "total": 2157
+        },
+        {
+          "prompt": 2043,
+          "output": 114,
+          "total": 2157
+        }
+      ],
+      "model_attempts": 3,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "tracking",
+      "trial": 3,
+      "process_name": "A",
+      "start": 44,
+      "end": 46,
+      "indices": [
+        44,
+        45
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        },
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        }
+      ],
+      "model_attempts": 0,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    },
+    {
+      "kind": "tracking",
+      "trial": 3,
+      "process_name": "B",
+      "start": 46,
+      "end": 48,
+      "indices": [
+        46,
+        47
+      ],
+      "outcomes": [
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        },
+        {
+          "completed": true,
+          "refused": true,
+          "answer": "I don't have enough information about that."
+        }
+      ],
+      "model_attempts": 0,
+      "worker_stdout": "",
+      "worker_stderr": ""
+    }
+  ],
+  "raw_record_count": 48
+}
