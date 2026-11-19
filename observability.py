@@ -34,6 +34,10 @@ SCHEMA_FIELDS = (
     "prompt_tokens",
     "output_tokens",
     "cache_hit",
+    "api_attempts",
+    "retry_count",
+    "retry_wait_ms",
+    "rate_limit_wait_ms",
     "error",
 )
 
@@ -118,6 +122,10 @@ class JsonlRequestLogger:
         prompt_tokens: int | None = None,
         output_tokens: int | None = None,
         cache_hit: bool | None = None,
+        api_attempts: int | None = None,
+        retry_count: int | None = None,
+        retry_wait_ms: float | int | None = None,
+        rate_limit_wait_ms: float | int | None = None,
         error: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Validate and append one request record, then return that record."""
@@ -138,6 +146,8 @@ class JsonlRequestLogger:
             ("retrieval_ms", retrieval_ms),
             ("generation_ms", generation_ms),
             ("duration_ms", duration_ms),
+            ("retry_wait_ms", retry_wait_ms),
+            ("rate_limit_wait_ms", rate_limit_wait_ms),
         ):
             if value is not None and (
                 isinstance(value, bool)
@@ -150,6 +160,8 @@ class JsonlRequestLogger:
         for name, value in (
             ("prompt_tokens", prompt_tokens),
             ("output_tokens", output_tokens),
+            ("api_attempts", api_attempts),
+            ("retry_count", retry_count),
         ):
             if value is not None and (
                 isinstance(value, bool) or not isinstance(value, int) or value < 0
@@ -179,6 +191,10 @@ class JsonlRequestLogger:
             "prompt_tokens": prompt_tokens,
             "output_tokens": output_tokens,
             "cache_hit": cache_hit,
+            "api_attempts": api_attempts,
+            "retry_count": retry_count,
+            "retry_wait_ms": retry_wait_ms,
+            "rate_limit_wait_ms": rate_limit_wait_ms,
             "error": error,
         }
 

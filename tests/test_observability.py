@@ -36,6 +36,10 @@ class JsonlRequestLoggerTests(unittest.TestCase):
             prompt_tokens=None,
             output_tokens=None,
             cache_hit=None,
+            api_attempts=2,
+            retry_count=1,
+            retry_wait_ms=1000.25,
+            rate_limit_wait_ms=50.5,
         )
         logger.close()
 
@@ -44,6 +48,10 @@ class JsonlRequestLoggerTests(unittest.TestCase):
         self.assertEqual(tuple(saved), SCHEMA_FIELDS)
         self.assertIsNone(saved["generation_ms"])
         self.assertIsNone(saved["prompt_tokens"])
+        self.assertEqual(saved["api_attempts"], 2)
+        self.assertEqual(saved["retry_count"], 1)
+        self.assertEqual(saved["retry_wait_ms"], 1000.25)
+        self.assertEqual(saved["rate_limit_wait_ms"], 50.5)
         self.assertIsNone(saved["error"])
         self.assertTrue(saved["timestamp"].endswith("Z"))
         datetime.fromisoformat(saved["timestamp"].replace("Z", "+00:00"))
@@ -91,6 +99,10 @@ class JsonlRequestLoggerTests(unittest.TestCase):
         self.assertIsNone(record["retrieval_ms"])
         self.assertIsNone(record["generation_ms"])
         self.assertIsNone(record["cache_hit"])
+        self.assertIsNone(record["api_attempts"])
+        self.assertIsNone(record["retry_count"])
+        self.assertIsNone(record["retry_wait_ms"])
+        self.assertIsNone(record["rate_limit_wait_ms"])
 
     def test_file_write_failure_is_raised_even_when_logging_suppresses_errors(self):
         class BrokenStream:

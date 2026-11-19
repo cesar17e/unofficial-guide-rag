@@ -282,6 +282,12 @@ def ask_pipeline(
                 prompt_tokens=usage.prompt_tokens if usage is not None else None,
                 output_tokens=usage.output_tokens if usage is not None else None,
                 cache_hit=usage.cache_hit if usage is not None else None,
+                api_attempts=usage.api_attempts if usage is not None else None,
+                retry_count=usage.retry_count if usage is not None else None,
+                retry_wait_ms=usage.retry_wait_ms if usage is not None else None,
+                rate_limit_wait_ms=(
+                    usage.rate_limit_wait_ms if usage is not None else None
+                ),
                 error=safe_error(exc, "The question could not be completed."),
             )
         except Exception as logging_exc:
@@ -298,10 +304,18 @@ def ask_pipeline(
         prompt_tokens = 0
         output_tokens = 0
         cache_hit = None
+        api_attempts = 0
+        retry_count = 0
+        retry_wait_ms = 0.0
+        rate_limit_wait_ms = 0.0
     else:
         prompt_tokens = usage.prompt_tokens if usage is not None else None
         output_tokens = usage.output_tokens if usage is not None else None
         cache_hit = usage.cache_hit if usage is not None else None
+        api_attempts = usage.api_attempts if usage is not None else None
+        retry_count = usage.retry_count if usage is not None else None
+        retry_wait_ms = usage.retry_wait_ms if usage is not None else None
+        rate_limit_wait_ms = usage.rate_limit_wait_ms if usage is not None else None
 
     try:
         log_request(
@@ -315,6 +329,10 @@ def ask_pipeline(
             prompt_tokens=prompt_tokens,
             output_tokens=output_tokens,
             cache_hit=cache_hit,
+            api_attempts=api_attempts,
+            retry_count=retry_count,
+            retry_wait_ms=retry_wait_ms,
+            rate_limit_wait_ms=rate_limit_wait_ms,
             error=None,
         )
     except Exception as logging_exc:

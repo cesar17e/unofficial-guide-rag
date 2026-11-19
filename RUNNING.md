@@ -175,12 +175,25 @@ and contains:
 | `prompt_tokens` | Gemini input tokens consumed by this request |
 | `output_tokens` | Gemini output tokens consumed by this request |
 | `cache_hit` | Whether generation was served from the response cache |
+| `api_attempts` | Actual Gemini API calls attempted for this request |
+| `retry_count` | Provider-triggered backoff waits for this request |
+| `retry_wait_ms` | Measured time spent in provider-retry backoff |
+| `rate_limit_wait_ms` | Measured time spent waiting for the local per-minute limiter |
 | `error` | Safe error type/message, or `null` |
 
 A relevance-gate refusal records zero tokens and `cache_hit: null` because
-Gemini was not called. A cached answer records zero newly consumed tokens and
-`cache_hit: true`. Unknown measurements remain `null` rather than being
-estimated.
+Gemini was not called. It also records zero API attempts, retries, and wait
+time. A cached answer records zero newly consumed tokens, zero API attempts,
+retries, and wait time, and `cache_hit: true`. A failure before generation
+leaves generation-only measurements as `null`; once generation begins, all
+known attempts and waits are preserved even if every retry fails. Unknown
+measurements remain `null` rather than being estimated.
+
+Both wait fields use the actual elapsed time measured by
+`time.perf_counter()`. They are not calculated by simply adding the requested
+sleep durations. `retry_wait_ms` covers exponential backoff after provider
+pushback. `rate_limit_wait_ms` covers proactive waiting by this application's
+local request-per-minute limiter.
 
 Inspect recent records on macOS or Linux:
 
@@ -261,6 +274,19 @@ If the application prints a rate-limit waiting message, leave it running. A
 `429` or resource-exhausted response normally means the provider quota needs
 time to recover, not that the API key is invalid.
 
+For a reproducible instrumentation-only check, run:
+
+```bash
+python run_retry_scenario.py --label after
+```
+
+This scenario is explicitly simulated: it performs no live retrieval and no
+Gemini request. A provider stub returns two synthetic `429` failures followed
+by a fixed response while the real retry loop, actual 1- and 2-second sleeps,
+pipeline integration, and JSONL logger run normally. It writes
+`results/retry_scenario_after.jsonl` and refuses to overwrite an existing
+file. Use it to inspect retry fields, not as live model-quality evidence.
+
 ## Project structure
 
 | Path | Purpose |
@@ -274,6 +300,7 @@ time to recover, not that the API key is invalid.
 | `gate.py` | Refuses questions whose best retrieval distance is above the threshold |
 | `generate.py` | Grounded Gemini calls, caching, retries, rate limiting, and token accounting |
 | `observability.py` | Append-only structured JSONL logging helper |
+| `run_retry_scenario.py` | Controlled simulated retry scenario for instrumentation comparisons |
 | `corpora/` | Source documents included with the project |
 | `tests/` | Mocked instrumentation, usage, cache, failure, and concurrency tests |
 | `logs/rag_runs.jsonl` | Generated local request records; ignored by Git |

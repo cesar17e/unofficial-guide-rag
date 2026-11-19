@@ -34,7 +34,7 @@ import os
 import sys
 import time
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import config
 
@@ -49,11 +49,15 @@ _budget_warned = False
 
 @dataclass(frozen=True)
 class GenerationUsage:
-    """Usage produced by one context-local generation attempt."""
+    """Usage and waiting produced by one context-local generation request."""
 
     prompt_tokens: int | None
     output_tokens: int | None
     cache_hit: bool | None
+    api_attempts: int = 0
+    retry_count: int = 0
+    retry_wait_ms: float = 0.0
+    rate_limit_wait_ms: float = 0.0
 
 
 _request_usage: ContextVar[GenerationUsage | None] = ContextVar(
@@ -119,7 +123,13 @@ def _wait_for_slot() -> None:
             file=sys.stderr,
             flush=True,
         )
-        time.sleep(sleep_for)
+        wait_started = time.perf_counter()
+        try:
+            time.sleep(sleep_for)
+        finally:
+            _accumulate_request_usage(
+                rate_limit_wait_ms=(time.perf_counter() - wait_started) * 1000
+            )
         _call_times[:] = [t for t in _call_times if time.monotonic() - t < 60.0]
 
 
@@ -147,6 +157,42 @@ def reset_request_usage() -> None:
 def request_usage() -> GenerationUsage | None:
     """Return usage for the current request context, if generation was reached."""
     return _request_usage.get()
+
+
+def _accumulate_request_usage(
+    *,
+    api_attempts: int = 0,
+    retry_count: int = 0,
+    retry_wait_ms: float = 0.0,
+    rate_limit_wait_ms: float = 0.0,
+) -> None:
+    """Add request-local counters without disturbing tokens or cache state."""
+    current = _request_usage.get()
+    if current is None:
+        return
+    _request_usage.set(
+        replace(
+            current,
+            api_attempts=current.api_attempts + api_attempts,
+            retry_count=current.retry_count + retry_count,
+            retry_wait_ms=current.retry_wait_ms + retry_wait_ms,
+            rate_limit_wait_ms=current.rate_limit_wait_ms + rate_limit_wait_ms,
+        )
+    )
+
+
+def _set_response_tokens(prompt_tokens: int | None, output_tokens: int | None) -> None:
+    """Publish response tokens while preserving accumulated wait measurements."""
+    current = _request_usage.get()
+    if current is None:
+        return
+    _request_usage.set(
+        replace(
+            current,
+            prompt_tokens=prompt_tokens,
+            output_tokens=output_tokens,
+        )
+    )
 
 
 def _record_tokens(response) -> tuple[int | None, int | None]:
@@ -271,6 +317,7 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
             client = _get_client()
             _call_times.append(time.monotonic())
             _session_calls += 1
+            _accumulate_request_usage(api_attempts=1)
 
             kwargs = {"model": config.MODEL, "contents": prompt}
             if system:
@@ -278,7 +325,7 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
 
             response = client.models.generate_content(**kwargs)
             prompt_tokens, output_tokens = _record_tokens(response)
-            _request_usage.set(GenerationUsage(prompt_tokens, output_tokens, False))
+            _set_response_tokens(prompt_tokens, output_tokens)
             text = (response.text or "").strip()
 
             if use_cache:
@@ -302,7 +349,14 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
                 file=sys.stderr,
                 flush=True,
             )
-            time.sleep(backoff)
+            wait_started = time.perf_counter()
+            try:
+                time.sleep(backoff)
+            finally:
+                _accumulate_request_usage(
+                    retry_count=1,
+                    retry_wait_ms=(time.perf_counter() - wait_started) * 1000,
+                )
 
     raise RuntimeError(
         f"Still rate limited after {config.MAX_RETRIES} attempts. Wait a "

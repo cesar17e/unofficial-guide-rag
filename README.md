@@ -566,3 +566,105 @@ because it was part of the real ten-request session, but it makes the retrieval
 and end-to-end averages higher than a fully warmed session would be. Generation
 latency also varied between requests, and the maximum end-to-end request was
 not the first request.
+
+**Run Log and Verdicts**
+
+I ran the Milestone 5 baseline with:
+
+```bash
+python run_capstone_eval.py --label before
+```
+
+The evaluator ran every capstone criterion in three independent trials. Each
+latency trial used a fresh process, one unscored uncached warm-up, and five
+genuine uncached Gemini requests. Each cache trial used another fresh process,
+an empty isolated cache, three genuine cache misses, and one immediate repeat.
+The tracking trials used two sequential fresh processes and refusal requests,
+which require no Gemini call. The failure trials performed real retrieval and
+then injected a client exception containing a synthetic canary; no mocked
+answer was treated as real execution evidence.
+
+The run produced 48 isolated records without changing the older preliminary
+log. It made 30 Gemini model attempts: 27 expected response-generating calls
+and three provider-requested retries. The full evidence is preserved in the
+[detailed report](results/capstone_eval_before.md),
+[machine-readable verdicts](results/capstone_eval_before.json), and
+[raw JSONL records](results/capstone_eval_before.jsonl).
+
+| Criterion | Trial 1 | Trial 2 | Trial 3 | Baseline verdict |
+|---|---|---|---|---|
+| 1. Logging completeness | 3/3 records; `success`, `refused`, `error`; all schemas valid | 3/3 records; `success`, `refused`, `error`; all schemas valid | 3/3 records; `success`, `refused`, `error`; all schemas valid | **PASS** |
+| 2. End-to-end latency | 5/5 at or below 4,000 ms; maximum 1,985.30 ms | 5/5 at or below 4,000 ms; maximum 1,753.91 ms | 5/5 at or below 4,000 ms; maximum 980.44 ms | **PASS** |
+| 3. Token and cache accuracy | Request/session totals both 2,043 prompt + 118 output; cache 0/0 | Request/session totals both 2,043 prompt + 121 output; cache 0/0 | Request/session totals both 2,043 prompt + 114 output; cache 0/0 | **PASS** |
+| 4. Failure observability | Safe error; 56.66/0.07/56.75 ms; canary absent; original re-raised | Safe error; 65.43/0.08/65.53 ms; canary absent; original re-raised | Safe error; 57.40/0.15/57.58 ms; canary absent; original re-raised | **PASS** |
+| 5. Session and request tracking | 4/4 request IDs unique; two session IDs differ; prefix preserved | 4/4 request IDs unique; two session IDs differ; prefix preserved | 4/4 request IDs unique; two session IDs differ; prefix preserved | **PASS** |
+
+The complete scored latency values were:
+
+- Trial 1: 811.73, 1,985.30, 1,252.29, 837.82, and 1,749.60 ms.
+- Trial 2: 1,753.91, 774.40, 1,668.03, 793.91, and 714.05 ms.
+- Trial 3: 840.96, 756.22, 782.26, 980.44, and 790.88 ms.
+
+Real output for Criterion 1 is on JSONL lines 2–4, 18–20, and 34–36: each
+set contains one complete success, refusal, and error record. Criterion 2 uses
+the five uncached success records identified in each trial's detailed report.
+Criterion 3 uses lines 9–12, 25–28, and 41–44; every fourth record has
+`cache_hit: true` and zero newly consumed tokens. Criterion 4 uses lines 4, 20,
+and 36, which contain `ControlledGenerationError`, the safe message, measured
+timings, and no canary. Criterion 5 uses lines 13–16, 29–32, and 45–48. The
+process session pairs were:
+
+- Trial 1: `4ea4e816-e2bd-49bf-9433-9019b4825881` and
+  `5733df89-c3d0-4439-a854-553baf858b9a`.
+- Trial 2: `7df3eb73-b15e-45ac-99ba-f5bf96c5bcb9` and
+  `8508c255-97fe-4ccc-8807-fc243ae7faeb`.
+- Trial 3: `31206727-bf9c-4775-aebe-92cb77015094` and
+  `1110ce46-0813-4f99-82d6-f13ec3f4da99`.
+
+Each evidence value has one responsible application function. Logging
+completeness comes from `app.py::ask_pipeline` and
+`observability.py::JsonlRequestLogger.log_request`. Latency comes from
+`app.py::ask_pipeline`, which measures with `time.perf_counter()`. Token and
+cache evidence comes from `generate.py::generate`, `_record_tokens`,
+`request_usage`, and `token_counts`. Safe failure evidence comes from
+`app.py::ask_pipeline` and `observability.py::safe_error`. Session and request
+IDs come from `observability.py::SESSION_ID`, `new_request_id`, and the
+append-only `JsonlRequestLogger.log_request` method. The evaluator that
+collected, validated, and summarized those records is
+`run_capstone_eval.py::parent_main`.
+
+The baseline also exposed limitations worth keeping visible. The provider
+requested three retries during the second cache trial even though each process
+was below the local rate-limit setting. The unscored warm-ups took 3,649.66,
+2,732.64, and 2,734.53 ms, confirming that the scored warm condition does not
+represent cold-start performance. The controlled failures occurred
+immediately before the provider call, so their very small generation timings
+test error recording and redaction rather than a slow provider timeout. These
+results also describe one machine, model configuration, and evaluation date;
+they do not establish performance on every computer or network.
+
+**Baseline Diagnosis**
+
+All five acceptance criteria passed in all three baseline trials, but the run
+still revealed an observability gap that those criteria did not measure.
+Record 25 in `results/capstone_eval_before.jsonl` took 12,490.39 ms end to end,
+including 10,969.39 ms in generation. Its request record showed only the final
+latency, token counts, and `cache_hit: false`. It did not say how many Gemini
+calls were attempted or how much of the generation time was waiting.
+
+The separate evaluator diagnostics for the same request recorded three
+provider-triggered retries with requested exponential backoffs of 1, 2, and 4
+seconds. That explains at least seven seconds of the slow generation, but a
+reader looking only at the structured request log could not distinguish retry
+waiting from model response time. Criterion 2 did not expose this because
+record 25 belonged to the explicit cache trial rather than the five scored
+latency requests. The other criteria checked record completeness, token/cache
+accuracy, safe failures, and identifiers, not retry-level detail. Passing all
+five therefore did not mean the log explained every slow request.
+
+Milestone 6.1 addresses only this gap. New request records add `api_attempts`,
+`retry_count`, `retry_wait_ms`, and `rate_limit_wait_ms`. The wait values are
+measured with `time.perf_counter()` around the actual sleeps. They remain
+request-local, accumulate across retries and terminal failures, and use zero
+for cache hits and relevance-gate refusals. The original baseline JSONL,
+detailed report, measurements, and acceptance criteria remain unchanged.
