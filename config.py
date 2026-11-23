@@ -1,10 +1,6 @@
-"""
-Settings for The Unofficial Guide.
+"""Central configuration for The Unofficial Guide.
 
-Everything you're likely to change lives here, at the top, on purpose.
-You'll edit THRESHOLD in Milestone 4 and the chunking numbers in Milestone 3.
-
-Anything you set in your .env file wins over the defaults here.
+Environment variables loaded from `.env` override the defaults in this file.
 """
 
 import os
@@ -16,22 +12,21 @@ ROOT = Path(__file__).parent
 load_dotenv(ROOT / ".env")
 
 
-# ─── The corpus you're working with ──────────────────────────────────────────
-# Change this to switch corpora, or pass --corpus on the command line.
+# ─── Corpus ──────────────────────────────────────────────────────────────────
+# Change this value or pass --corpus on the command line.
 # Options are the folder names inside corpora/. See corpora/README.md.
 
 CORPUS = os.getenv("AI201_CORPUS", "campus_life")
 
 
-# ─── Chunking (Milestone 3) ──────────────────────────────────────────────────
-# These are deliberately plain, generic numbers. Milestone 3 is where you
-# replace them with numbers that fit the documents you actually read.
+# ─── Fallback chunking ───────────────────────────────────────────────────────
+# Used by chunker.fallback_split for corpora that need character windows.
 
 CHUNK_SIZE = 800        # characters per chunk
 CHUNK_OVERLAP = 120     # characters shared between neighbouring chunks
 
 
-# ─── Retrieval (Milestone 4) ─────────────────────────────────────────────────
+# ─── Retrieval ───────────────────────────────────────────────────────────────
 
 TOP_K = 5               # how many chunks to pull back per question
 
@@ -40,9 +35,8 @@ TOP_K = 5               # how many chunks to pull back per question
 #
 # LOWER IS BETTER: 0.3 is a close match, 0.9 is unrelated.
 #
-# 0.6 is a reasonable starting point, not a right answer. Milestone 4 has you
-# measure your own two groups of distances and put the cutoff in the gap.
-# Most corpora land somewhere between 0.45 and 0.75.
+# The 0.6 cutoff was selected by comparing supported and unsupported questions.
+# Recalibrate it if the corpus or embedding model changes.
 THRESHOLD = 0.6
 
 
@@ -53,8 +47,7 @@ THRESHOLD = 0.6
 # This is the model Chroma bundles, and leaving it alone is the fast path: it
 # downloads about 80 MB from Chroma's own CDN and needs nothing else installed.
 #
-# Setting it to any other name — unit 2's "try a second embedding model"
-# stretch option — switches to loading that model from Hugging Face instead,
+# Setting any other name switches to loading that model from Hugging Face,
 # which needs `pip install 'sentence-transformers>=3.4,<3.5'` first. store.py
 # says so with a real error message rather than a stack trace if you forget.
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
@@ -89,9 +82,8 @@ def collection_name(name: str | None = None, variant: str = "default") -> str:
     """
     Name of the vector-store collection for a corpus.
 
-    `variant` lets you index the same corpus two different ways and query both
-    without deleting anything — you'll want that in unit 2 when you compare
-    chunking strategies.
+    `variant` lets multiple indexes for the same corpus coexist, which is useful
+    when comparing chunking or embedding strategies.
 
     Chroma is fussy about collection names: 3 to 63 characters, starting and
     ending with a letter or digit, and nothing but letters, digits, underscores

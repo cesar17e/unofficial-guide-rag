@@ -15,7 +15,7 @@ The instructions below were verified with:
 - the bundled `all-MiniLM-L6-v2` ONNX embedding model
 
 Python 3.12 is recommended. Python 3.11 and 3.13 may also work with the pinned
-packages, but Python 3.12.15 is the version verified for this capstone.
+packages, but Python 3.12.15 is the version verified for this project.
 
 ## Clone the repository
 
@@ -88,7 +88,7 @@ The full environment check verifies Python, pinned packages, the API key, the
 embedding model, Chroma, and one real Gemini request:
 
 ```bash
-python test.py
+python verify_environment.py
 ```
 
 The isolated instrumentation tests use mocks and make no Gemini or Chroma
@@ -301,12 +301,14 @@ file. Use it to inspect retry fields, not as live model-quality evidence.
 | `generate.py` | Grounded Gemini calls, caching, retries, rate limiting, and token accounting |
 | `observability.py` | Append-only structured JSONL logging helper |
 | `run_retry_scenario.py` | Controlled simulated retry scenario for instrumentation comparisons |
+| `verify_environment.py` | Verifies dependencies, embeddings, Chroma, and Gemini locally |
 | `corpora/` | Source documents included with the project |
+| `docs/` | Acceptance criteria and supporting project documentation |
 | `tests/` | Mocked instrumentation, usage, cache, failure, and concurrency tests |
 | `logs/rag_runs.jsonl` | Generated local request records; ignored by Git |
 | `chroma_db/` | Generated local vector index; ignored by Git |
 | `.cache/` | Generated response cache; ignored by Git |
-| `results/` | Earlier committed evaluation evidence |
+| `results/` | Preserved evaluation evidence |
 
 ## Troubleshooting
 

@@ -1,25 +1,10 @@
-"""
-Stage 2 of the pipeline: splitting documents into chunks.
+"""Stage 2: convert cleaned documents into retrievable chunks.
 
-⚠️ THIS IS THE FILE YOU CHANGE IN MILESTONE 3.
-
-`split_documents` below is deliberately plain. It cuts every document into
-fixed-size pieces with a fixed overlap and pays no attention to where sentences
-or paragraphs end. It works, and it is not good.
-
-On a corpus of short posts it may not cut anything at all: `campus_life` comes
-out as 88 documents and 88 chunks, because almost nothing in it reaches 800
-characters. That is the baseline, not a bug — Milestone 3 is where you decide
-whether one post should stay one chunk.
-
-Your job in Milestone 3 is to replace the *body* of `split_documents` with a
-strategy that fits the documents you actually read in Milestone 1. Keep the
-name and the shape of what it returns — the rest of the pipeline calls it, and
-your README has to name the function that produced your chunks.
-
-If you get stuck for 30 minutes, `fallback_split` is the original. Switch back
-to it, write down what you saw, and move on. That's a real observation about
-your pipeline, not giving up.
+The default `campus_life` corpus contains short, topic-focused documents, so
+`split_documents` preserves each document as one chunk. Keeping a title and its
+supporting context together produced clearer retrieval inputs than arbitrary
+character windows. `fallback_split` remains available for longer corpora that
+need fixed-size overlapping chunks.
 """
 
 from dataclasses import dataclass
@@ -35,7 +20,7 @@ class Chunk:
     text: str
     source: str        # which file it came from
     index: int         # which chunk within that file, starting at 0
-    produced_by: str   # the function that made it — cite this in your README
+    produced_by: str   # the function responsible for this chunk
 
     @property
     def label(self) -> str:
@@ -48,10 +33,10 @@ def fallback_split(
     overlap: int | None = None,
 ) -> list[Chunk]:
     """
-    The starter's original chunker. Fixed-size character windows with overlap.
+    Generic fixed-size character windows with overlap.
 
-    Keep this function. Milestone 3's stop rule points back at it, and having
-    something to compare your own strategy against is useful in unit 2.
+    This provides an option and comparison point for corpora whose documents
+    are too long to preserve as single chunks.
     """
     chunk_size = chunk_size or config.CHUNK_SIZE
     overlap = overlap or config.CHUNK_OVERLAP
@@ -79,28 +64,14 @@ def fallback_split(
 
     return chunks
 
-"""
-Split documents into chunks. ⚠️ REPLACE THE BODY OF THIS IN MILESTONE 3.
-
-Right now it just calls the fallback. That is the plain, generic behaviour
-the brief is talking about.
-
-When you write your own strategy, set `produced_by` to
-"chunker.py::split_documents" so your README's Sample Chunks section names
-the right function. `app.py chunks` prints that string for you.
-
-Things worth thinking about before you write any code:
-    - Are your documents short posts or long guides?
-    - Is the useful information in one sentence, or spread over a paragraph?
-    - Would splitting on paragraph breaks keep more thoughts intact than
-    splitting on a character count?
-"""
-
 def split_documents(documents: list[Document]) -> list[Chunk]:
     """
     Chunking strategy for campus_life.
 
-    The campus life corpus contains short, topic focused posts, so each complete document is kept as one chunk. This preserves the title and supporting context together instead of splitting at an arbitrary character boundary. Overlap is not needed because documents are not split into multiple chunks.
+    The campus-life corpus contains short, topic-focused posts, so each
+    complete document is kept as one chunk. This preserves titles and
+    supporting context instead of splitting at arbitrary character boundaries.
+    Overlap is unnecessary because documents are not divided further.
     """
     chunks: list[Chunk] = []
 

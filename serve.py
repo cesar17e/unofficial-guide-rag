@@ -1,30 +1,21 @@
 #!/usr/bin/env python3
-"""
-The Unofficial Guide — the same pipeline, over HTTP.
+"""Expose The Unofficial Guide's shared pipeline over HTTP.
 
     python serve.py                          run it locally on port 5000
     gunicorn serve:app                       run it the way a host runs it
 
-Nothing new happens in this file. It is a wrapper: a request comes in, it
-hands the question to `app.py::ask_pipeline` — the exact function the command
-line uses — and hands the answer back as JSON. Retrieval, the relevance gate
-and the grounded prompt all still live where they lived. If you change how
-your system answers, you change it in those files and this one follows.
+This module is intentionally a thin wrapper around `app.py::ask_pipeline`, the
+same function used by the CLI. Retrieval, gating, generation, and structured
+logging therefore stay consistent across both interfaces.
 
 Two routes:
 
     POST /ask       {"question": "..."} in, the answer and its sources out
     GET  /health    is the service up, and is there an index to search
 
-Why this exists: `app.py` runs once and exits, which is fine on your laptop
-and impossible to deploy. A hosted service has to stay up and wait for
-requests. This is the smallest thing that does that.
-
-⚠️ There is deliberately no logging, no timing and no metrics in this file.
-Unit 9 has you build the structured log yourself — the request line, the
-timing field everyone skips, the whole instrument-before-you-deploy exercise.
-Shipping a logger here would hand you the answer to that. Add yours in unit 9;
-this file stays the bare shell until then.
+`app.py` runs a command and exits; this process stays available for HTTP
+requests. Instrumentation remains in the shared pipeline rather than being
+duplicated at the transport layer.
 """
 
 import os

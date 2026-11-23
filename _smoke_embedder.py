@@ -1,16 +1,12 @@
-"""
-A stand-in embedding model, used only by this repository's own smoke test.
+"""Deterministic embedding stand-in used only by the local smoke test.
 
-Students should never touch this and never set AI201_FAKE_EMBEDDINGS. It exists
-so the pipeline can be exercised in an automated environment that can't
-download the real model — for example when checking that a change to the
-starter didn't break anything.
+`AI201_FAKE_EMBEDDINGS` lets the pipeline run in automated environments that
+cannot download the real model. It is not an application configuration option.
 
 It produces deterministic vectors from word hashes. They are good enough to
 show that data flows correctly through the pipeline. They are NOT good enough
 to say anything about retrieval quality or about where a relevance threshold
-belongs. The staff repo's `_staff/calibrate.py` does that with the real
-model.
+belongs. Retrieval-quality evaluation must use the real embedding model.
 """
 
 import hashlib

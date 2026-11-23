@@ -1,10 +1,4 @@
-"""
-Stage 1 of the pipeline: loading documents off disk and cleaning them up.
-
-The five stages are loading, chunking, embedding, retrieval, and generation.
-When something goes wrong in unit 2, your job is to work out which of the five
-it happened in. This is the first one.
-"""
+"""Stage 1: load local source documents and normalize their text."""
 
 import re
 from dataclasses import dataclass

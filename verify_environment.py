@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-"""
-AI201 environment check.
+"""Verify the local environment required by The Unofficial Guide.
 
-Run this before every class:
+Run from the repository root:
 
-    python test.py
+    python verify_environment.py
 
-It checks the things that actually break: your Python version, your virtual
-environment, your pinned packages, your API key, and one real call to the
-model. It is the same file in every unit's starter repo — the checks adapt
-to whatever that unit's requirements.txt pins.
-
-Nothing here touches your project code, and nothing here is graded.
+The checks cover Python, the virtual environment, pinned dependencies, machine
+resources, API-key configuration, the embedding model, Chroma, and one genuine
+Gemini request. The script reads project configuration but does not modify the
+application, index, or evaluation evidence.
 """
 
 import importlib
@@ -23,8 +20,8 @@ import shutil
 import sys
 from pathlib import Path
 
-# --- Course-wide pins -------------------------------------------------------
-# The model lives here, in one place, so a provider change is one edit.
+# --- Project requirements ---------------------------------------------------
+# The model lives here so a provider change is one edit.
 # Override locally by setting AI201_MODEL in your .env.
 MODEL = os.getenv("AI201_MODEL", "gemini-3.5-flash-lite")
 
@@ -41,7 +38,6 @@ IMPORT_NAMES = {
     "python-dotenv": "dotenv",
     "google-genai": "google.genai",
     "rank-bm25": "rank_bm25",
-    "rank_bm25": "rank_bm25",
     "pillow": "PIL",
     "beautifulsoup4": "bs4",
 }
@@ -65,7 +61,7 @@ def check_python():
     v = sys.version_info
     actual = f"{v.major}.{v.minor}.{v.micro}"
     if (v.major, v.minor) < MIN_PYTHON:
-        return report("FAIL", "Python version", f"Found {actual}. This course needs 3.11 or newer.")
+        return report("FAIL", "Python version", f"Found {actual}. This project needs 3.11 or newer.")
     if (v.major, v.minor) >= MAX_PYTHON:
         return report(
             "FAIL",
@@ -110,7 +106,7 @@ def check_packages():
         return report(
             "FAIL",
             "requirements.txt",
-            f"Not found next to test.py. Run this from inside the starter repo folder.",
+            "Not found next to verify_environment.py. Run this from the repository root.",
         )
 
     missing, wrong = [], []
@@ -250,10 +246,9 @@ def check_chroma():
         return report("SKIP", "Vector store", "chromadb not installed yet.")
     try:
         client = chromadb.EphemeralClient()
-        # Cosine is set explicitly here for the same reason the starter sets it:
-        # Chroma defaults to squared L2, which would make the course's distance
-        # threshold meaningless. Vectors are passed in directly, the way the
-        # starter does it — Chroma stores and searches, it doesn't embed.
+        # Chroma defaults to squared L2, which would make the application's
+        # cosine threshold meaningless. Pass vectors directly so this check
+        # validates storage and retrieval independently from model loading.
         col = client.create_collection("envcheck", metadata={"hnsw:space": "cosine"})
         col.add(ids=["a", "b"], documents=["the library closes at ten", "parking costs four dollars"],
                 embeddings=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
@@ -282,14 +277,14 @@ def check_api_call(key):
         elif "API key" in msg or "401" in msg or "403" in msg or "PERMISSION" in msg:
             hint = "\n         The key was rejected. Create a new one and paste it into .env again."
         elif "404" in msg or "NOT_FOUND" in msg:
-            hint = f"\n         The model string '{MODEL}' did not resolve. Post in the help channel."
+            hint = f"\n         The model string '{MODEL}' did not resolve. Check AI201_MODEL and provider access."
         report("FAIL", "Model call", f"{type(e).__name__}: {msg[:160]}{hint}")
 
 
 # --- Run --------------------------------------------------------------------
 
 def main():
-    print("\nAI201 environment check\n" + "-" * 60)
+    print("\nThe Unofficial Guide — environment check\n" + "-" * 60)
     check_python()
     check_venv()
     check_packages()
@@ -308,15 +303,14 @@ def main():
     print(f"{len(passed)} passed, {len(failed)} failed, "
           f"{len(warned)} to look at, {len(skipped)} skipped\n")
     if failed:
-        print("Not ready yet. Fix the FAIL lines above, then run test.py again.")
-        print("Still stuck after one honest attempt? Post the whole output in the")
-        print("help channel — the day before class, not the morning of.\n")
+        print("Environment not ready. Fix the FAIL lines above, then run")
+        print("verify_environment.py again.\n")
         return 1
     if skipped:
-        print("You're set for what's installed. The skipped checks are packages")
-        print("this unit's requirements.txt doesn't pin yet — that's expected.\n")
+        print("Available checks passed. Review skipped checks before running the")
+        print("full application.\n")
         return 0
-    print("You're set. See you in class.\n")
+    print("Environment ready.\n")
     return 0
 
 

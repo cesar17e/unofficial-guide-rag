@@ -5,8 +5,8 @@ The Unofficial Guide — command line.
     python app.py index                  build the search index (do this first)
     python app.py ask "your question"    ask one question
     python app.py ask                    ask questions until you quit
-    python app.py chunks                 print sample chunks      (Milestone 3)
-    python app.py retrieve "question"    show distances, no answer (Milestone 4)
+    python app.py chunks                 inspect representative chunks
+    python app.py retrieve "question"    show retrieval distances, no generation
     python app.py corpora                list the available corpora
 
 Every command takes --corpus NAME to work with a different corpus without
@@ -104,7 +104,7 @@ def _chunks_at(chunks, spec):
 
 
 def cmd_chunks(args):
-    """Milestone 3. Print chunks so you can read them and paste them."""
+    """Print representative chunks for inspecting the indexing input."""
     from ingest import load_documents
     from chunker import split_documents
 
@@ -131,9 +131,8 @@ def cmd_chunks(args):
         )
 
     print(f"{heading}\n")
-    print("Paste these into your README under Sample Chunks. The rubric asks")
-    print("for the source file and the function that produced them — both are")
-    print("printed for you below.\n")
+    print("Each chunk includes its source file and producing function so the")
+    print("indexing input can be traced back to application code.\n")
 
     for i, chunk in enumerate(sample, 1):
         print("=" * 70)
@@ -150,7 +149,7 @@ def cmd_chunks(args):
 
 
 def cmd_retrieve(args):
-    """Milestone 4. Retrieval only, with distances, and no model call."""
+    """Inspect retrieval distances without making a model call."""
     from store import search
     import gate
 
@@ -175,9 +174,8 @@ def cmd_retrieve(args):
     decision = gate.check(results)
     print(f"\nGate: {decision.explanation}")
     print("\nLower is better. 0.3 is a close match, 0.9 is unrelated.")
-    print("Milestone 4: run your five questions, then the five in OUT_OF_SCOPE")
-    print("that your documents clearly don't cover, and look for the gap")
-    print("between the two groups. Your cutoff goes in that gap.")
+    print("Compare supported and unsupported questions when calibrating the")
+    print("relevance cutoff; a useful threshold separates those two groups.")
 
 
 def ask_pipeline(
@@ -437,7 +435,7 @@ def build_parser():
     parser.add_argument(
         "--variant",
         default="default",
-        help="index variant, for holding two chunkings at once (unit 2)",
+        help="index variant, for comparing multiple chunking strategies",
     )
 
     sub = parser.add_subparsers(dest="command", required=True)
@@ -447,7 +445,7 @@ def build_parser():
     p_index = sub.add_parser("index", help="build the search index")
     p_index.set_defaults(func=cmd_index)
 
-    p_chunks = sub.add_parser("chunks", help="print sample chunks (Milestone 3)")
+    p_chunks = sub.add_parser("chunks", help="inspect representative chunks")
     p_chunks.add_argument("-n", type=int, default=5, help="how many to print")
     p_chunks.add_argument(
         "--from-doc",
@@ -465,7 +463,7 @@ def build_parser():
     )
     p_chunks.set_defaults(func=cmd_chunks)
 
-    p_ret = sub.add_parser("retrieve", help="show distances only (Milestone 4)")
+    p_ret = sub.add_parser("retrieve", help="show retrieval distances without generation")
     p_ret.add_argument("question")
     p_ret.add_argument("--top-k", type=int)
     p_ret.set_defaults(func=cmd_retrieve)
@@ -491,7 +489,7 @@ def main():
     except KeyboardInterrupt:
         print("\nStopped.")
         sys.exit(130)
-    except Exception as exc:  # noqa: BLE001 — students read this, not a traceback
+    except Exception as exc:  # noqa: BLE001 — CLI users get a concise error
         print(f"\n{type(exc).__name__}: {exc}\n", file=sys.stderr)
         sys.exit(1)
 

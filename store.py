@@ -1,20 +1,10 @@
-"""
-Stages 3 and 4 of the pipeline: embedding chunks and retrieving them.
+"""Embed, store, retrieve, and rerank document chunks.
 
-Three things in here are worth knowing about, because they'd quietly break the
-rest of the project if they were wrong:
-
-1. The Chroma collection is created with cosine distance, explicitly. Chroma
-   defaults to squared L2, and the 0.6 threshold the course uses is calibrated
-   against cosine. Getting this wrong makes every distance number meaningless.
-
-2. `search` returns the distance alongside each chunk. Milestone 4 has you
-   compare distances, so they have to be visible.
-
-3. The embedding model is the one Chroma bundles, not one loaded through
-   `sentence-transformers`. It is the same model — `all-MiniLM-L6-v2`, 384
-   dimensions — but it arrives as an ONNX build from Chroma's own CDN, so the
-   install needs neither PyTorch nor a reachable Hugging Face. See `_embedder`.
+Collections explicitly use cosine distance because the relevance threshold is
+calibrated against cosine scores. The default local embedder is Chroma's ONNX
+build of `all-MiniLM-L6-v2` (384 dimensions), avoiding a PyTorch dependency.
+`search` preserves cosine distances for the relevance gate while returning
+candidates in combined semantic and BM25 rank order.
 """
 
 import os
@@ -25,9 +15,8 @@ import re
 from rank_bm25 import BM25Okapi
 
 # Must be set BEFORE chromadb is imported. Without it, some Chroma versions
-# print "Failed to send telemetry event ..." on every single call — which looks
-# exactly like a real error, isn't one, and cost a previous cohort a lot of
-# confused help-channel messages.
+# print "Failed to send telemetry event ..." on every call even though the
+# underlying Chroma operation succeeds.
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 
 import chromadb  # noqa: E402
@@ -74,12 +63,10 @@ class _OnnxEmbedder:
 
 def _sentence_transformer(name: str):
     """
-    The escape hatch: any model that isn't the bundled one.
+    Load an embedding model that is not bundled with Chroma.
 
-    Unit 2's "try a second embedding model" stretch option comes through here,
-    and so does anything you set `EMBEDDING_MODEL` to. This path *does* need
-    `sentence-transformers` and a reachable Hugging Face, neither of which the
-    default install has — which is the whole point of the default install.
+    This optional path needs `sentence-transformers` and access to Hugging Face;
+    neither dependency is required by the default ONNX configuration.
     """
     try:
         from sentence_transformers import SentenceTransformer
@@ -145,10 +132,8 @@ def build_index(
     """
     Embed every chunk and store it.
 
-    `variant` lets you keep more than one index of the same corpus at the same
-    time. In unit 2, when you compare two chunking strategies, index the second
-    one as variant="v2" and you can query both instead of deleting the first
-    and starting over.
+    `variant` lets multiple indexes for one corpus coexist so chunking or
+    embedding strategies can be compared without deleting the current index.
     """
     name = config.collection_name(corpus, variant)
     client = _client()
@@ -161,7 +146,7 @@ def build_index(
     collection = client.create_collection(
         name=name,
         # ⚠️ Do not remove. Chroma defaults to squared L2, and every distance
-        # number in this course assumes cosine.
+        # relevance threshold in this application assumes cosine.
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -180,17 +165,20 @@ def build_index(
 
     return len(chunks)
 
-#Helper functions for BM25 re-ranking of search results
+# ─── BM25 / reciprocal-rank reranking ───────────────────────────────────────
+
+
 def _tokenize(text: str) -> list[str]:
-    # Convert text into simple lowercase tokens for BM25
+    """Convert text into simple lowercase tokens for BM25."""
     return re.findall(r"[a-z0-9]+", text.lower())
 
-#Now that we have the tokenization function, we can implement the BM25 re-ranking function. This function will take a question and a list of search results, and it will re-rank the results based on their relevance to the question using the BM25 algorithm.
+
 def _rerank_with_bm25(question: str, results: list[Result]) -> list[Result]:
     """
     Re-rank semantic search results using BM25 keyword matching.
 
-    Chroma still decides which chunks are retrieved. BM25 only changes their order so exact terms such as course numbers and location names can receive more weight.
+    Chroma determines the candidate set. BM25 changes its order so exact terms
+    such as course numbers and location names receive additional weight.
     """
     if not results:
         return results
@@ -204,19 +192,16 @@ def _rerank_with_bm25(question: str, results: list[Result]) -> list[Result]:
     bm25 = BM25Okapi(tokenized_docs)
     bm25_scores = bm25.get_scores(query_tokens)
 
-    #Rank the existing semantic results by their BM25 scores.
+    # Rank the existing semantic results by their BM25 scores.
     bm25_order = sorted(
         range(len(results)),
         key=lambda i: bm25_scores[i],
         reverse=True,
     )
 
-    bm25_ranks = {
-        index: rank
-        for rank, index in enumerate(bm25_order, start=1)
-    }
+    bm25_ranks = {index: rank for rank, index in enumerate(bm25_order, start=1)}
 
-    #Combine semantic rank and BM25 rank using reciprocal rank fusion.
+    # Combine semantic rank and BM25 rank using reciprocal rank fusion.
     scored_results = []
 
     for semantic_rank, result in enumerate(results, start=1):
@@ -233,7 +218,6 @@ def _rerank_with_bm25(question: str, results: list[Result]) -> list[Result]:
     return [result for _, result in scored_results]
 
 
-#Changed search function to call the BM25 re-ranking function after retrieving results from Chroma. This way, the final results returned to the user will be ordered based on both semantic similarity and keyword relevance.
 def search(
     question: str,
     top_k: int | None = None,

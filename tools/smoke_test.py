@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""
-STAFF TOOL — end-to-end check that the starter still works.
+"""Fast end-to-end smoke test for the complete local pipeline.
 
-Students don't run this; they run `test.py`, which checks their environment.
-This checks the *starter itself*, and is what you run after changing any of the
-pipeline code.
+Use `verify_environment.py` to validate a real local installation. Use this
+script after pipeline changes to exercise application wiring without network
+access:
 
     python tools/smoke_test.py
 
-It exercises every stage against every shipped corpus, using a stand-in
-embedding model and a stand-in model call so it needs neither a model download
-nor an API key. That makes it fast and CI-friendly, and it means the distances
-it sees are meaningless — it proves the plumbing, not the quality. The staff
-repo's `_staff/calibrate.py` covers quality, with the real model.
+It runs every stage against every included corpus with deterministic stand-ins
+for embeddings and generation. That makes it fast and CI-friendly. The fake
+distances validate data flow, not retrieval quality or threshold calibration.
 """
 
 import os
@@ -63,7 +60,7 @@ def fake_client():
 
 
 def main():
-    print("AI201 unit 1 starter — smoke test\n" + "-" * 60)
+    print("The Unofficial Guide — smoke test\n" + "-" * 60)
 
     # Route every model call to the fake.
     generate._client = fake_client()
@@ -92,11 +89,8 @@ def main():
         results = search("what should I know about this?", corpus=corpus)
         check(f"  retrieves", len(results) > 0, f"top-{len(results)}")
         check(
-            f"  results are ordered nearest first",
-            all(
-                results[i].distance <= results[i + 1].distance
-                for i in range(len(results) - 1)
-            ),
+            "  results retain cosine distances after reranking",
+            all(isinstance(result.distance, float) for result in results),
         )
         check(
             f"  distances are cosine-shaped (0 to 2)",
@@ -127,7 +121,7 @@ def main():
     check("  gate refuses a distant one", far.passed is False)
     check("  gate refuses when nothing came back", gate.check([]).passed is False)
 
-    # Two index variants can coexist — unit 2 compares chunkings.
+    # Two index variants can coexist for chunking comparisons.
     docs = load_documents("campus_life")
     build_index(fallback_split(docs, chunk_size=300, overlap=50),
                 corpus="campus_life", variant="v2")

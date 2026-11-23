@@ -1,8 +1,6 @@
-"""
-One-line descriptions of the provided corpora, for `python app.py corpora`.
+"""Corpus summaries displayed by `python app.py corpora`.
 
-The full descriptions — which you should read before picking, in Milestone 1 —
-are in corpora/README.md.
+Longer descriptions are available in `corpora/README.md`.
 """
 
 from pathlib import Path
@@ -24,8 +22,7 @@ BLURBS = {
         "and spread across paragraphs."
     ),
     "practice": (
-        "Not for your project — the small corpus used for the in-class "
-        "follow-along."
+        "Small, self-contained board-game corpus for smoke tests and examples."
     ),
 }
 

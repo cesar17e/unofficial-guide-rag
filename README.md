@@ -1,776 +1,277 @@
 # The Unofficial Guide
 
-Cesar Estrada Balbuena, campus_life
+An observable, source-grounded retrieval-augmented generation (RAG) system for
+answering questions over a local knowledge base.
 
----
+**Python · ChromaDB · all-MiniLM-L6-v2 · BM25/RRF · Gemini · Flask · JSONL**
 
-# Unit 1
+The Unofficial Guide retrieves relevant campus documents, rejects unsupported
+questions before they reach the language model, and generates concise answers
+that name their sources. Every request produces structured operational data,
+including stage latency, token usage, cache behavior, API attempts, retries,
+and safe error details.
 
-## What This Does
+The application ingests an existing directory of text or Markdown documents,
+cleans and chunks them, generates local embeddings, and builds a persistent
+ChromaDB index. Users then query that indexed knowledge base through the CLI or
+optional HTTP API. It is a document-ingestion and question-answering pipeline,
+not a web crawler or document-upload interface.
 
-<!-- Three or four sentences. Which corpus you picked, and the kinds of
-     questions your system answers. Write it for someone who has never seen
-     this repo. Milestone 5. -->
+## Why this project is interesting
 
-     The Unofficial Guide is a RAG system built over the `campus_life` corpus, which contains short documents about university life including courses, housing, dining, transportation, and administrative policies. Users can ask specific factual questions about these topics, and the system retrieves relevant documents before generating an answer grounded in those sources. Each answer also identifies the source document used.
+Many RAG demos stop after returning a plausible answer. This project also asks:
 
-## Chunking Strategy
+- Was the retrieved context relevant enough to answer safely?
+- Which source supported the response?
+- How long did retrieval and generation take?
+- How many tokens and API attempts did this request consume?
+- Was the response cached, retried, refused, or unsuccessful?
+- Can those claims be reproduced across independent evaluation trials?
 
-**Chunk size:** One complete source document per chunk
+The result is a compact RAG application that can be inspected and evaluated,
+not just demonstrated.
 
-**Overlap:** 0 characters
-
-The `campus_life` corpus contains short, topic-focused posts that average about 317 characters, and the longest document I observed was still short enough to stand on its own. Because each file usually contains one complete thought, keeping the whole document together preserves the title and supporting details without cutting sentences apart. I used no overlap because documents are not split into multiple chunks, so overlap would only duplicate text without adding useful context.
-
-## Sample Chunks
-
-<!-- Five chunks, pasted as text. Label each one and name the file it came from
-     AND the function that produced it — the grader checks your code against
-     what you claim here.
-
-     `python app.py chunks -n 5` prints all three for you. Copy them straight
-     across.
-
-     Milestone 3. -->
-
-**Chunk 1** — source: `admin_add_drop_deadline.txt#0` — produced by: `chunker.py::split_documents`
-
-```
-On the add/drop deadline
-
-You can add a course through the end of the second week. Dropping is a longer window, through the end of week six, but a drop after week two shows as a W on your transcript. Nothing anywhere on the registrar's site says this plainly, and students find out from each other.
-```
-
-**Chunk 2** — source: `course_biol_160.txt#0` — produced by: `chunker.py::split_documents`
-
-```
-BIOL 160 Cell Biology
-
-I lived here my sophomore year. Format is lecture three times a week with a weekly lab. Assessment: four unit tests and a cumulative final. Not curved.
-
-Expect 9 to 11 hours a week, the heaviest first-year course by reputation.
-
-The one piece of advice: the unit tests come fast, roughly every three weeks; falling behind once is very hard to recover from.
-```
-
-**Chunk 3** — source: `course_hist_118_workload.txt#0`  — produced by: `chunker.py::split_documents`
-
-```
-Workload for HIST 118 Modern World History
-
-People keep asking so: a lot of reading, about 120 pages a week, but no problem sets. That's real time, not optimistic time.
-
-It's front-loaded — the first month is heavier than the rest, partly because you're learning the format.
-
-```
-
-**Chunk 4** — source: `dining_pellew_dining_hall_followup.txt#0`  — produced by: `chunker.py::split_documents`
-
-```
-Re: Pellew Dining Hall
-
-Adding to what people have said about Pellew Dining Hall. The wait figure of 12 to 18 minutes at peak matches what I've seen. If you're trying to eat between classes, go before 11:45 and it's a different building entirely.
-
-Also worth saying: the furthest hall from anywhere, next to the athletics centre. Nobody tells you this at orientation.
-```
-
-**Chunk 5** — source: `housing_innisfree_hall.txt#0`  — produced by: `chunker.py::split_documents`
-```
-Innisfree Hall — what it's actually like
-
-Transferred in last year, so take this with a grain of salt. Built 1991, renovated 2022. Rooms are doubles arranged as pairs sharing one bathroom between two rooms.
-
-The good: the shared-bathroom-between-two-rooms arrangement is the best compromise on campus.
-
-The bad: no air conditioning, which matters for the first three weeks of September.
-
-Laundry costs $1.75 wash, $1.75 dry, app-based. On noise: moderate; the building is L-shaped and the short wing is much quieter.
-
-```
-
-## Sample Answer
-
-<!-- One complete question and answer, pasted as text, with the source line
-     visible. Milestone 4. -->
-
-Generated by: `generate.py::answer_from_chunks`
-
-     
-**Question:**
-"How long does it take to walk from Fenwick Court to central campus?"
-
-**Answer:**
-```
-It takes about 18 minutes on foot to walk from Fenwick Court to central campus. 
-
-Source: `transit_walking.txt` and `housing_fenwick_court.txt`
-
-Sources retrieved: dining_pellew_dining_hall_followup.txt, dining_the_ridgeway_cafe_followup.txt, housing_fenwick_court.txt, transit_shuttle.txt, transit_walking.txt
-```
-
-**My relevance cutoff:** 0.6
-
-<!-- The number you set in config.py, and how you got there.
-
-     You ran five questions your corpus covers and the five in OUT_OF_SCOPE
-     that it clearly doesn't, and wrote down the best distance for each. What
-     did those two groups look like? Where was the gap? Put the actual numbers
-     here — the table below wants all ten rows.
-
-     Milestone 4. -->
-     I tested the five in scope questions in `questions.py` and the five out of scope questions. The in scope questions had best distances between 0.199 and 0.3889, while the out of scope questions had best distances between 0.8246 and 0.9340. This created a large gap between the two groups.
-
-     I kept the relevance cutoff at 0.6 because it falls inside that gap. At this cutoff, all five in scope questions pass the relevance gate and all five out of scope questions are refused.
-
-     
-| Question | In corpus? | Best distance |
-|---|---|---|
-| How are juniors and seniors ranked in the housing lottery? | Yes | 0.2034 |
-| What time does Halden Hall close? | Yes | 0.3232 |
-| How long does it take to walk from Fenwick Court to central campus? | Yes | 0.1990 |
-| Are the CS 340 midterm and final open-book? | Yes | 0.3889 |
-| When is the best time to do laundry in Aldridge Hall? | Yes | 0.3021 |
-| What is the capital of Mongolia? | No | 0.8246 |
-| How do I change the oil in a diesel engine? | No | 0.9340 |
-| Who won the 1994 World Cup? | No | 0.8859 |
-| What is the recommended dosage of ibuprofen for a headache? | No | 0.8442 |
-| How do I write a for loop in Rust? | No | 0.8960 |
-
-## How I Used AI
-
-<!-- Two specific moments. For each: what you asked for, what came back, and
-     what you changed about it.
-
-     "I asked Claude to write the chunking function from my notes. It ignored
-     the overlap, so I added that myself" is the level of detail we're after.
-     "I used AI to help me code" is not.
-
-     Milestone 5. -->
-
-**1.** I asked codex whether the starter's fixed size chunking made sense for the `campus_life` corpus. It suggested keeping each short, topic-focused document as one chunk instead of splitting by character count. I used that approach, set overlap to zero, and then checked five sample chunks to make sure each one still contained a complete thought.
-
-**2.** I asked codex to review the starter grounding prompt after testing one of my generated answers. It suggested making the restrictions against outside knowledge and unsupported inference more explicit. I kept the original structure but added rules telling the model not to infer, assume, guess, or generalize beyond what the retrieved documents explicitly state.
-
-**3.** I asked Codex to help me understand why semantic retrieval ranked a
-CS 210 document above the more relevant CS 340 document for my CS 340 question.
-It suggested combining semantic retrieval with BM25 keyword matching. I chose
-to keep Chroma's top-five retrieval and use BM25 with Reciprocal Rank Fusion
-only to re-rank those candidates, then compared the before and after rankings
-to see whether the change actually helped.
-
-<!-- ── Stretch features ─────────────────────────────────────────────────────
-     Doing one? Say so here BEFORE you start. A feature this README never
-     claims earns nothing.
-     ───────────────────────────────────────────────────────────────────────── -->
-
----
-
-# Unit 2
-
-<!-- These sections get ADDED to what's already above. Don't delete or rewrite
-     unit 1 — the point is that someone can see what you said before you knew
-     how it went. -->
-
-## Run Log — Before
-
-<!-- Your five criteria, three runs each. `python run_eval.py --label before`
-     runs the questions, puts the OUT_OF_SCOPE ones through the gate, and
-     writes it all into results/ for you. Targets come from criteria.md; the
-     verdict column is your call.
-
-     Criterion 3 is measured in one deterministic pass rather than three, so
-     the same number goes in all three run columns. That's correct, not lazy.
-
-     Milestone 1. -->
-
-| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
-|---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
-| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
-| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET|
-| 4. Sampled chunks contain complete sentences | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
-| 5. In-scope questions pass the relevance gate | 5 of 5 | 5/5 | 5/5 | 5/5 | MET|
-
-
-<!-- Underneath, paste the REAL output for each criterion from one of your
-     runs — the actual text your system produced, not a description of it.
-     Name the file and function that produced it. -->
-
-
-### Criterion 1 evidence — Retrieved chunks contain the answer
-
-Produced by: `run_eval.py::main`  
-Retrieval: `store.py::search`  
-Chunks produced by: `chunker.py::split_documents`
-
-Example from Run 1:
-
-**Question:** Are the CS 340 midterm and final open-book?
-
-**Sources retrieved:**
+## Example
 
 ```text
-course_cs_210.txt
-course_cs_210_exams.txt
-course_cs_340.txt
-course_cs_340_exams.txt
-course_cs_340_workload.txt
+Question: What time does Halden Hall close?
+
+Answer: Halden Hall closes at 7:00pm.
+Source: dining_halden_hall.txt
 ```
 
-**Answer:**
+An unrelated question such as `What is the capital of Mongolia?` is rejected
+before Gemini is called:
 
 ```text
-Yes, the CS 340 midterm and final are both open-book.
-
-Source: `course_cs_340.txt` (also found in `course_cs_340_exams.txt`)
+I don't have enough information about that.
 ```
 
-For all five in-scope questions, the retrieved sources included at least one document containing the answer.
+## Architecture
 
-### Criterion 2 evidence — Every answer names a source
+```mermaid
+flowchart LR
+    D[Corpus documents] --> C[Clean and chunk]
+    C --> E[all-MiniLM-L6-v2 embeddings]
+    E --> V[(Chroma cosine index)]
 
-Produced by: `run_eval.py::main`  
-Generation: `generate.py::answer_from_chunks`
-
-Example from Run 1:
-
-**Question:** When is the best time to do laundry in Aldridge Hall?
-
-```text
-The best time to do laundry in Aldridge Hall is Tuesday or Wednesday morning.
-
-Source: housing_aldridge_hall_laundry.txt
+    Q[Question] --> QE[Local query embedding]
+    QE --> V
+    V --> S[Top-5 semantic candidates]
+    S --> H[BM25 + RRF reranking]
+    H --> G{Best distance below 0.60?}
+    G -- No --> R[Grounded refusal]
+    G -- Yes --> P[Source-labeled prompt]
+    P --> K{Cached response?}
+    K -- Yes --> A[Answer]
+    K -- No --> M[Gemini generation]
+    M --> A
+    R --> L[Append-only JSONL record]
+    A --> L
 ```
 
-All five generated answers named at least one source document in each run.
-
-### Criterion 3 evidence — Gate stops out-of-corpus questions
-
-Produced by: `run_eval.py::check_out_of_scope`  
-Relevance cutoff: `0.6`
-
-```text
-What is the capital of Mongolia?                              0.825  refused
-How do I change the oil in a diesel engine?                   0.934  refused
-Who won the 1994 World Cup?                                   0.886  refused
-What is the recommended dosage of ibuprofen for a headache?   0.844  refused
-How do I write a for loop in Rust?                            0.896  refused
-```
-
-The relevance gate refused all 5 of 5 out-of-corpus questions. Retrieval and
-the gate are deterministic, so this result is recorded as 5/5 for all three
-run columns.
-
-### Criterion 4 evidence — Sampled chunks contain complete sentences
-
-Produced by: `chunker.py::split_documents`  
-Command: `python app.py chunks -n 5`  
-Saved in: `results/chunks_before.txt`
-
-The five sampled chunks were checked three times. In each check, all five
-chunks began and ended at complete document or sentence boundaries.
-
-Example:
-
-```text
-Workload for HIST 118 Modern World History
-
-People keep asking so: a lot of reading, about 120 pages a week, but no problem sets. That's real time, not optimistic time.
-
-It's front-loaded — the first month is heavier than the rest, partly because you're learning the format.
-```
-
-Source: `course_hist_118_workload.txt#0`
-
-Result: 5/5 in all three checks.
-
-### Criterion 5 evidence — In-scope questions pass the relevance gate
-
-Produced by: `run_eval.py::main`  
-Relevance cutoff: `0.6`
-
-```text
-Housing lottery       0.2034  passed
-CS 340 exams          0.3889  passed
-Halden Hall           0.3232  passed
-Aldridge laundry      0.3021  passed
-Fenwick walking       0.1990  passed
-```
-
-All 5 in-scope questions passed the relevance gate and reached answer generation.
-
-## Verdicts
-
-<!-- MET or MISSED for each of the five, against the target you wrote last
-     unit — not a new one. Plus a sentence on how you decided. That sentence
-     matters most where it was close.
-
-     If your target said 4 of 5 and your runs came out 4, 3, 4, that's a MISS.
-     The target has to hold, not show up occasionally.
-
-     Milestone 2. -->
-
-| # | Criterion | Verdict | How I decided |
-|---|---|---|---|
-| 1 | Retrieved chunks contain the answer | MET | The target was at least 4 of 5 questions. In all three runs, all 5 questions had at least one retrieved chunk that contained the answer, so the criterion was met consistently.|
-| 2 | Every answer names a source | MET | The target was 5 of 5 answers naming at least one source. Across all three runs, every generated answer included at least one source filename, so the system met the target on every question and every run. |
-| 3 | The relevance gate stops out-of-corpus questions | MET | The target was at least 4 of 5 out-of-corpus questions being refused. The gate refused all 5 questions, with best distances from 0.825 to 0.934, all above the 0.6 cutoff, so the target was clearly met. |
-| 4 | Sampled chunks contain complete sentences | MET | The target was 5 of 5 sampled chunks containing complete sentences without being cut off mid-sentence. I checked the five sampled chunks three times, and all five preserved complete document and sentence boundaries in each check. |
-| 5 | In-scope questions pass the relevance gate | MET | The target was all 5 supported questions passing the relevance gate and reaching generation. All five had best distances below the 0.6 cutoff in every run, ranging from 0.1990 to 0.3889, so all five passed the gate as expected. |
-
-## Diagnoses
-
-<!-- For each miss: which stage caused it, and how. The stage alone isn't
-     enough — you need the mechanism.
-
-     Not a diagnosis: "Question 3 didn't work."
-     A diagnosis:     "Question 3 asks about laundry costs. The answer is in
-                       one sentence that got split across two chunks, so
-                       neither chunk on its own contains it."
-
-     The five stages: loading → chunking → embedding → retrieval → generation.
-
-     Look for a pattern. If three misses all ask about numbers, that's one
-     problem, not three.
-
-     Missed nothing? Say so, then say honestly whether your targets were set
-     low, and which one you'd tighten and to what.
-
-     Milestone 3. -->
-
-     No criteria were missed in the baseline evaluation. All five met their original
-     targets across the three runs, so there was no failed pipeline stage that needed
-     to be diagnosed.
-
-     However, Criteria 1 and 4 were somewhat safer than I realized. Criterion 1 only
-     required an answer-bearing chunk to appear somewhere in the top five retrieved
-     results. The system met that target, but the ranking was still noisy in some
-     cases. For example, for the CS 340 question, `course_cs_210_exams.txt` ranked
-     ahead of the more directly relevant `course_cs_340_exams.txt`. This showed that
-     the criterion could still pass even when the best-ranked document was not the
-     most relevant one.
-
-     Criterion 4 was also limited because it only checked five sampled chunks.
-     `python app.py chunks -n 5` returned the same deterministic sample each time, so
-     running it three times confirmed that those five chunks were well formed but did
-     not test different parts of the corpus.
-
-     If I were tightening the criteria, I would require an answer-bearing chunk to
-     appear within the top three results for at least 4 of the 5 questions. I would
-     also change Criterion 4 to check complete sentence or document boundaries across
-     all chunks in the `campus_life` corpus instead of only five sampled chunks.
-
-## The Improvement
-
-**What I changed:**  
-I added BM25 keyword reranking to the existing semantic retrieval and used
-Reciprocal Rank Fusion to combine the semantic and keyword rankings. Chroma
-still retrieves the top five semantic candidates, while BM25 gives exact terms
-such as course numbers and location names additional influence over their final
-order.
-
-**Why I picked it:**  
-The baseline met all five acceptance criteria, but retrieval ranking was still
-noisy for some exact terms. For example, the CS 340 question ranked CS 210
-documents ahead of the relevant CS 340 documents. I chose hybrid reranking
-because it directly addresses that ranking problem while keeping the existing
-semantic retrieval and relevance gate unchanged.
-
-### Run Log - After
-
-| Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
-|---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
-| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
-| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
-| 4. Sampled chunks contain complete sentences | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
-| 5. In-scope questions pass the relevance gate | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
-
-
-**Did it help?**
-
-Yes, but the improvement is visible in retrieval ranking rather than in the
-original acceptance-criterion scores. All five criteria were already at 5/5
-before the change and remained at 5/5 afterward. For the CS 340 question,
-`course_cs_340_exams.txt` moved ahead of `course_cs_210_exams.txt` and became
-the first-ranked result after hybrid reranking.
-
-The other tested questions continued to satisfy the same acceptance criteria,
-so the change improved the specific ranking issue I identified without hurting
-the existing relevance gate, generation, or source attribution behavior.
-**After evidence — retrieval ranking** 
-
-Produced by: `store.py::search`  
-Hybrid reranking: `store.py::_rerank_with_bm25`
-
-For the CS 340 question, the hybrid ranking placed the most directly relevant
-document first:
-
-```text
-1   0.4376   course_cs_340_exams.txt
-2   0.3889   course_cs_210_exams.txt
-3   0.4806   course_cs_340.txt
-4   0.5440   course_cs_210.txt
-5   0.6122   course_cs_340_workload.txt
-```
-
-## What's Still Broken
-
-<!-- For each criterion still missed after your fix: what you'd do about it,
-     and why you stopped where you did.
-
-     "I ran out of time" is fine if it's true. Pretending nothing is left is
-     not.
-
-     Milestone 5. -->
-None of the five original acceptance criteria remained missed after the
-improvement. All five were already met in the baseline and remained met after
-adding hybrid reranking.
-
-However, the retrieval system still has limitations that the original criteria
-do not fully measure. The BM25 step only re-ranks the five candidates already
-returned by semantic search, so it cannot recover a relevant document if Chroma
-does not place it in the original top five. The evaluation also showed that my
-criteria focused more on whether the answer was eventually retrieved than on
-how well the retrieved documents were ranked.
-
-I stopped here because the project asks for one measured improvement, and the
-hybrid reranking addressed the ranking issue I identified without hurting any
-of the existing acceptance criteria.
-
-## What I'd Do Differently
-
-<!-- Knowing what you know now — which of your five criteria would you write
-     differently, and why?
-
-     Milestone 5. -->
-
-Knowing what I know now, I would make Criterion 1 stricter. Instead of only
-requiring an answer-bearing chunk to appear somewhere in the top five results,
-I would require one to appear within the top three results for at least 4 of
-the 5 questions. The baseline showed that the original criterion could still
-pass even when less relevant documents ranked above the correct source.
-
-I would also make Criterion 4 test all chunks in the `campus_life` corpus
-instead of the same five deterministic samples. That would give a stronger
-measurement of whether my document-level chunking consistently preserves
-complete boundaries across the corpus.
-
-## Capstone
-
-**What This Extends**
-
-This capstone adds observability to The Unofficial Guide, the RAG system built
-in Units 1 and 2. The existing application chunks and embeds the `campus_life`
-corpus in Chroma, combines semantic retrieval with BM25/RRF reranking, applies
-a relevance gate, and uses Gemini for grounded, source-cited answers. Unit 9
-adds structured JSONL records for successful, refused, and failed requests,
-including stage timing and usage measurements.
-
-**The Shape**
-
-I chose Shape A, Deploy and Instrument, using Path B, Local with Logs. The
-documented local application now leaves persistent, inspectable records after
-each session. The scope is reproducibility and observability only. Semantic
-retrieval, BM25/RRF, chunking, embeddings, the relevance threshold, Gemini
-configuration, rate-limiting behavior, Docker/cloud hosting, and a new UI are
-out of scope. This keeps the results attributable to instrumentation rather
-than changes to the RAG system itself.
-
-**Running It**
-
-The CLI is the primary run path. Clean setup, indexing, questions, logging,
-caching, tests, troubleshooting, and optional Flask instructions are in
-[RUNNING.md](RUNNING.md).
-
-Final clean-checkout verification is **incomplete**. On November 19, 2026, a
-temporary clone of commit `0e05d8b` used a fresh Python 3.12.15 environment,
-installed the pinned requirements, and passed all 22 tests. Indexing did not
-complete because ONNX/CoreML failed while compiling the embedding model in the
-managed macOS environment; no Chroma collection was created. Runs from the
-original workspace prove execution but do not replace this missing check.
-
-
-**Instrumentation**
-
-These records came from the local CLI on November 18, 2026, using the
-`campus_life__default` index. Records 1–10 are genuine uncached (`AI201_CACHE=0`)
-Gemini requests; 11–12 demonstrate a cache miss then hit; 13 is a relevance
-refusal; and 14 is a controlled missing-index failure. They were copied
-unchanged from the ignored `logs/rag_runs.jsonl` file.
-
-`session_id` identifies a process and `request_id` a question. The timing
-fields cover retrieval, generation, and the whole pipeline; token fields show
-new Gemini usage, so cache hits use zero and refusals use `cache_hit: null`.
-`error` contains a safe type and message. These are preliminary checks, not
-the formal evaluation.
-
-```jsonl
-{"timestamp": "2026-11-18T20:05:13.547Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "9c83db61-fd6c-4732-be7d-e2d8c2eecdd6", "question": "How are juniors and seniors ranked in the housing lottery?", "answer": "Juniors and seniors in the housing lottery are ordered by accumulated credit hours first, with a random tie-break used only when necessary (admin_housing_lottery.txt).", "status": "success", "retrieval_ms": 2372.178375000658, "generation_ms": 2014.8454589980247, "duration_ms": 4388.563374999649, "prompt_tokens": 719, "output_tokens": 36, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:19.017Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "2376a3dd-d1b3-4c7e-a3b3-fd02baf1a6a8", "question": "Are the CS 340 midterm and final open-book?", "answer": "Yes, both the midterm and the final for CS 340 are open-book (Sources: course_cs_340_exams.txt and course_cs_340.txt).", "status": "success", "retrieval_ms": 274.620459000289, "generation_ms": 5194.711959000415, "duration_ms": 5469.409291999909, "prompt_tokens": 630, "output_tokens": 43, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:23.178Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "58c4df7a-ea76-4cce-9ac3-59c3e5e48a89", "question": "What time does Halden Hall close?", "answer": "Halden Hall closes at 7:00pm. \n\nSources: `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`", "status": "success", "retrieval_ms": 291.07762499916134, "generation_ms": 3865.9060419995512, "duration_ms": 4157.094333000714, "prompt_tokens": 694, "output_tokens": 40, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:24.993Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "e0dcf741-861f-486f-b341-78f70d3d19c3", "question": "When is the best time to do laundry in Aldridge Hall?", "answer": "The best time to do laundry in Aldridge Hall is Tuesday or Wednesday morning. \n\nSource: housing_aldridge_hall_laundry.txt (also mentioned in housing_aldridge_hall_laundry.txt / housing_aldridge_hall.txt has building details, but the laundry timing is explicitly in housing_aldridge_hall_laundry.txt).", "status": "success", "retrieval_ms": 257.3646249984449, "generation_ms": 1554.7439160000067, "duration_ms": 1812.189167001634, "prompt_tokens": 640, "output_tokens": 78, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:26.328Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "e2e65053-539d-4026-9181-ef10eab4fe52", "question": "How long does it take to walk from Fenwick Court to central campus?", "answer": "It takes 18 minutes on foot to walk from Fenwick Court to central campus. \n\nSource documents: `transit_walking.txt` and `housing_fenwick_court.txt`", "status": "success", "retrieval_ms": 72.34266700106673, "generation_ms": 1261.5204590001667, "duration_ms": 1333.9057089979178, "prompt_tokens": 708, "output_tokens": 41, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:26.954Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "3331f2c0-1d5c-4835-a86c-77e21e34ec4a", "question": "When can a student add or drop a course?", "answer": "Based on the provided document, you can add a course through the end of the second week. Dropping is allowed through the end of week six (admin_add_drop_deadline.txt).", "status": "success", "retrieval_ms": 104.89008400327293, "generation_ms": 520.3745830003754, "duration_ms": 625.3197080004611, "prompt_tokens": 517, "output_tokens": 40, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:27.923Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "91efb61b-46fa-4a6a-8f3f-7f3385cbb2b4", "question": "How long do interlibrary loan requests usually take?", "answer": "Interlibrary system requests take about a week (from admin_library_holds.txt).", "status": "success", "retrieval_ms": 85.35937499982538, "generation_ms": 883.655458001158, "duration_ms": 969.0622919988527, "prompt_tokens": 536, "output_tokens": 18, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:29.405Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "5dacc7f3-c9ab-40ef-a963-3e32467fbd5e", "question": "How often does the campus shuttle run on weekdays and weekends?", "answer": "Based on the provided documents, the campus shuttle runs a loop every 20 minutes from 7am to 11pm on weekdays and every 40 minutes on weekends (transit_shuttle.txt).", "status": "success", "retrieval_ms": 78.55541600292781, "generation_ms": 1402.9609999997774, "duration_ms": 1481.5638330001093, "prompt_tokens": 639, "output_tokens": 44, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:30.325Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "f4676a84-e236-442b-b3c5-a8b7657ac363", "question": "How much printing credit does each student receive per semester?", "answer": "Every student receives $30 of printing per semester (admin_printing_quota.txt).", "status": "success", "retrieval_ms": 83.17704200089793, "generation_ms": 836.0568339994643, "duration_ms": 919.3630839981779, "prompt_tokens": 540, "output_tokens": 19, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:05:31.352Z", "session_id": "02e8be59-41c0-4aa3-b561-0d5ac547f2a7", "request_id": "8b0481a9-a187-44e2-97a3-2fd6e78dcb1a", "question": "What are the library hours during reading week?", "answer": "During reading week, the library is open until 10pm. \n\nSource: study_library_hours.txt", "status": "success", "retrieval_ms": 200.9437499982596, "generation_ms": 825.6107499983045, "duration_ms": 1026.6142079999554, "prompt_tokens": 588, "output_tokens": 25, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:06:28.734Z", "session_id": "4f95684b-8326-47b0-b28b-d08101c18bee", "request_id": "f88cddd8-80d9-4c22-8897-c30a0a2df57f", "question": "For the capstone cache check only, according to the campus documents, what time does Halden Hall close?", "answer": "Halden Hall closes at 7:00pm, according to `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`.", "status": "success", "retrieval_ms": 1511.9796660001157, "generation_ms": 1414.569583001139, "duration_ms": 2926.6391660021327, "prompt_tokens": 670, "output_tokens": 38, "cache_hit": false, "error": null}
-{"timestamp": "2026-11-18T20:06:29.022Z", "session_id": "4f95684b-8326-47b0-b28b-d08101c18bee", "request_id": "6f83e798-c9ec-4bc9-b3e8-021d29f6c8f8", "question": "For the capstone cache check only, according to the campus documents, what time does Halden Hall close?", "answer": "Halden Hall closes at 7:00pm, according to `dining_halden_hall.txt` and `dining_halden_hall_followup.txt`.", "status": "success", "retrieval_ms": 285.9121250003227, "generation_ms": 0.15945799896144308, "duration_ms": 286.12854200036963, "prompt_tokens": 0, "output_tokens": 0, "cache_hit": true, "error": null}
-{"timestamp": "2026-11-18T20:06:29.134Z", "session_id": "4f95684b-8326-47b0-b28b-d08101c18bee", "request_id": "ddeb4407-faf6-4e75-93f6-8171c992a5bc", "question": "What is the capital of Mongolia?", "answer": "I don't have enough information about that.", "status": "refused", "retrieval_ms": 112.41745900042588, "generation_ms": null, "duration_ms": 112.4577920018055, "prompt_tokens": 0, "output_tokens": 0, "cache_hit": null, "error": null}
-{"timestamp": "2026-11-18T20:06:35.336Z", "session_id": "7ef1d665-f362-459e-9f2d-674c53e405a9", "request_id": "469ff352-4652-427f-9d94-dd078730c106", "question": "What time does Halden Hall close?", "answer": null, "status": "error", "retrieval_ms": 169.4855829991866, "generation_ms": null, "duration_ms": 169.4890420003503, "prompt_tokens": null, "output_tokens": null, "cache_hit": null, "error": {"type": "RuntimeError", "message": "The question could not be completed."}}
-```
-
-**What It Costs**
-
-Measured token consumption is the primary operational cost metric. The ten
-real, in-scope requests above ran with `AI201_CACHE=0`; token counts came from
-Gemini response metadata and `time.perf_counter()` measured the three latency
-values.
+The vector search determines the candidate set. BM25 and reciprocal rank
+fusion then rerank those candidates so exact terms such as course numbers and
+building names receive more weight without discarding semantic similarity.
+
+## Engineering highlights
+
+### Retrieval and grounding
+
+- Preserves each short, topic-focused campus document as one complete chunk
+  instead of splitting sentences across fixed character windows.
+- Generates 384-dimensional embeddings locally with Chroma's ONNX build of
+  `all-MiniLM-L6-v2` and stores them in a persistent cosine-distance index.
+- Retrieves five semantic candidates and reranks them with BM25 and reciprocal
+  rank fusion.
+- Applies a measured cosine-distance gate (`0.60`) before generation and
+  returns a deterministic refusal when the evidence is too weak.
+- Sends Gemini only the retrieved excerpts and requires every generated answer
+  to identify its source file.
+
+### Reliability and observability
+
+- Writes exactly one append-only JSONL record for each success, refusal, or
+  error through the shared `ask_pipeline()` function used by both CLI and HTTP
+  paths.
+- Assigns UUID request and session identifiers and records retrieval,
+  generation, and end-to-end latency using `time.perf_counter()`.
+- Captures per-request prompt/output tokens, cache hits, API attempts, retry
+  counts, measured retry waits, and local rate-limit waits without leaking
+  metrics between concurrent request contexts.
+- Sanitizes exception details in logs while re-raising the original application
+  exception; logging failures are visible but do not replace successful answers
+  or mask pipeline failures.
+- Includes response caching, a session request budget, process-local rate
+  limiting, and exponential backoff for provider rate-limit responses.
+
+### Evaluation
+
+- Defines five measurable acceptance criteria for logging completeness,
+  latency, token/cache accuracy, safe failure records, and request/session IDs.
+- Runs every criterion in three independent trials with isolated records and
+  genuine Gemini responses where model output is required.
+- Preserves machine-readable JSON, raw JSONL, and human-readable reports for
+  both baseline and post-improvement evaluations.
+- Uses deterministic mocks only for automated unit tests and explicitly labels
+  the controlled retry comparison as simulated rather than live model evidence.
+
+## Measured results
 
 | Measurement | Result |
 |---|---:|
-| Requests measured | 10 |
-| Total prompt tokens | 6,211 |
-| Average prompt tokens per request | 621.1 |
-| Total output tokens | 384 |
-| Average output tokens per request | 38.4 |
-| Total combined reported tokens | 6,595 |
-| Average combined reported tokens per request | 659.5 |
-| Average retrieval latency | 382.05 ms |
-| Average generation latency | 1,836.04 ms |
-| Average end-to-end latency | 2,218.31 ms |
-| Minimum end-to-end latency | 625.32 ms |
-| Maximum end-to-end latency | 5,469.41 ms |
+| Automated instrumentation tests | **22 passed** |
+| Baseline acceptance evaluation | **5/5 criteria passed** in all three trials |
+| Scored warm uncached latency | **30/30 requests under 4 seconds** across the two formal evaluations |
+| Ten-request uncached sample | **2.22 s** average end-to-end latency |
+| Average reported token usage | **659.5 tokens/request** (621.1 prompt + 38.4 output) |
+| Post-improvement retry visibility | **12 backoffs / 26.04 s** of provider retry waiting made explicit |
 
-The cache example, refusal, and error are excluded because they are not
-successful uncached calls. No dollar estimate is made. The first request's
-2,372.18 ms retrieval cold start remains in the average; the other nine ranged
-from 72.34–291.08 ms, so a warm-only average would be lower. Generation also
-varied, and the slowest overall request was not the first.
+The observability improvement did not claim to make Gemini faster. It made
+previously hidden provider waiting diagnosable. In the post-improvement run,
+one of fifteen criterion trials failed because provider rate limiting exhausted
+all attempts before the first response could seed the cache. The project keeps
+that result instead of rerunning or weakening the target: **4/5 criteria passed
+overall, with 14/15 individual trials passing**.
 
-For planning, 100 daily users making one comparable successful uncached request
-each would project to:
+The failed cache trial does not by itself indicate incorrect token accounting
+or a broken cache. No successful response existed to cache, and the other two
+cache trials correctly produced zero-token cache hits.
 
-| Projected measurement | Calculation | Result |
-|---|---:|---:|
-| Prompt tokens per day | 621.1 × 100 | 62,110 |
-| Output tokens per day | 38.4 × 100 | 3,840 |
-| Combined reported tokens per day | 659.5 × 100 | **65,950** |
+Detailed evidence:
 
-This is not measured daily usage. It assumes the ten-request token profile and
-excludes cache hits, refusals, failures, retries without returned metadata,
-local embedding work, and changes in question mix or prompt size. The small
-sample supports rough capacity planning, not a usage or billing forecast.
+- [Acceptance criteria](docs/acceptance-criteria.md)
+- [Baseline evaluation report](results/capstone_eval_before.md)
+- [Post-improvement evaluation report](results/capstone_eval_after.md)
+- [Baseline raw request records](results/capstone_eval_before.jsonl)
+- [Post-improvement raw request records](results/capstone_eval_after.jsonl)
+- [Controlled retry comparison — before](results/retry_scenario_before.md)
+- [Controlled retry comparison — after](results/retry_scenario_after.md)
 
-**Run Log and Verdicts**
+## Quick start
 
-I ran the Milestone 5 baseline with:
+The verified environment uses **Python 3.12.15**. The first indexing run needs
+internet access to download the approximately 80 MB embedding model; Gemini
+generation also requires internet access and an API key.
 
 ```bash
-python run_capstone_eval.py --label before
+git clone https://github.com/cesar17e/unofficial-guide-rag.git
+cd unofficial-guide-rag
+
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
 ```
 
-Each criterion ran in three independent trials. Latency trials used a fresh
-process, one unscored uncached warm-up, and five genuine uncached Gemini calls.
-Cache trials used a fresh process and empty cache for three misses and one
-repeat. Tracking trials used refusals across two processes. Failure trials did
-real retrieval, then injected a canary-bearing client exception; no mocked
-answer counted as real evidence.
+Add your Gemini key to `.env`:
 
-The run produced 48 isolated records and 30 Gemini attempts: 27 expected calls
-and three provider-requested retries. Earlier logs were unchanged. Evidence is
-preserved in the
-[detailed report](results/capstone_eval_before.md),
-[machine-readable verdicts](results/capstone_eval_before.json), and
-[raw JSONL records](results/capstone_eval_before.jsonl).
+```text
+GEMINI_API_KEY=your_key_here
+```
 
-| Criterion | Trial 1 | Trial 2 | Trial 3 | Baseline verdict |
-|---|---|---|---|---|
-| 1. Logging completeness | 3/3 records; `success`, `refused`, `error`; all schemas valid | 3/3 records; `success`, `refused`, `error`; all schemas valid | 3/3 records; `success`, `refused`, `error`; all schemas valid | **PASS** |
-| 2. End-to-end latency | 5/5 at or below 4,000 ms; maximum 1,985.30 ms | 5/5 at or below 4,000 ms; maximum 1,753.91 ms | 5/5 at or below 4,000 ms; maximum 980.44 ms | **PASS** |
-| 3. Token and cache accuracy | Request/session totals both 2,043 prompt + 118 output; cache 0/0 | Request/session totals both 2,043 prompt + 121 output; cache 0/0 | Request/session totals both 2,043 prompt + 114 output; cache 0/0 | **PASS** |
-| 4. Failure observability | Safe error; 56.66/0.07/56.75 ms; canary absent; original re-raised | Safe error; 65.43/0.08/65.53 ms; canary absent; original re-raised | Safe error; 57.40/0.15/57.58 ms; canary absent; original re-raised | **PASS** |
-| 5. Session and request tracking | 4/4 request IDs unique; two session IDs differ; prefix preserved | 4/4 request IDs unique; two session IDs differ; prefix preserved | 4/4 request IDs unique; two session IDs differ; prefix preserved | **PASS** |
-
-The complete scored latency values were:
-
-- Trial 1: 811.73, 1,985.30, 1,252.29, 837.82, and 1,749.60 ms.
-- Trial 2: 1,753.91, 774.40, 1,668.03, 793.91, and 714.05 ms.
-- Trial 3: 840.96, 756.22, 782.26, 980.44, and 790.88 ms.
-
-Representative output: Criterion 1 uses JSONL lines 2–4, 18–20, and 34–36
-(complete success/refusal/error sets). Criterion 2 uses each report's five
-uncached successes. Criterion 3 uses lines 9–12, 25–28, and 41–44, whose fourth
-records are zero-token cache hits. Criterion 4 uses safe, timed, canary-free
-`ControlledGenerationError` records on lines 4, 20, and 36. Criterion 5 uses
-lines 13–16, 29–32, and 45–48, with session pairs:
-
-- Trial 1: `4ea4e816-e2bd-49bf-9433-9019b4825881` and
-  `5733df89-c3d0-4439-a854-553baf858b9a`.
-- Trial 2: `7df3eb73-b15e-45ac-99ba-f5bf96c5bcb9` and
-  `8508c255-97fe-4ccc-8807-fc243ae7faeb`.
-- Trial 3: `31206727-bf9c-4775-aebe-92cb77015094` and
-  `1110ce46-0813-4f99-82d6-f13ec3f4da99`.
-
-Evidence sources: `app.py::ask_pipeline` and
-`observability.py::JsonlRequestLogger.log_request` produce complete timed
-records; `generate.py::generate`, `_record_tokens`, `request_usage`, and
-`token_counts` supply token/cache data; `observability.py::safe_error` sanitizes
-failures; `SESSION_ID` and `new_request_id` supply IDs; and
-`run_capstone_eval.py::parent_main` collects and validates the results.
-
-Baseline limits: the provider requested three retries despite each process
-remaining below its local limit. Warm-ups took 3,649.66, 2,732.64, and 2,734.53
-ms, so scored warm performance excludes cold starts. Controlled failures occur
-immediately before the provider call, testing recording/redaction rather than
-a slow timeout. Results cover one machine, model configuration, and date.
-
-**Baseline Diagnosis**
-
-All five baseline criteria passed, but record 25 in
-`results/capstone_eval_before.jsonl` exposed a gap: its 12,490.39 ms total and
-10,969.39 ms generation time did not reveal the three provider retries or
-1-, 2-, and 4-second backoffs recorded separately by the evaluator. Criterion
-2 did not catch this cache-trial record, and the other criteria did not test
-retry detail. Passing therefore did not mean every slow request was explained.
-
-Milestone 6.1 added request-local `api_attempts`, `retry_count`,
-`retry_wait_ms`, and `rate_limit_wait_ms`. Waits use `time.perf_counter()`,
-accumulate through terminal failures, and are zero for cache hits and refusals.
-The baseline evidence and criteria remain unchanged.
-
-**The Improvement**
-
-I selected retry and rate-limit observability so slow requests explain their
-waiting time. The four new fields do not change retrieval, generation,
-caching, retries, or speed.
-
-The controlled comparison used two simulated provider `429`s, real 1- and
-2-second sleeps, and a fixed success. These are **simulated provider responses,
-not Gemini results**. The before case used commit `cdb5f6d` in an isolated
-checkout without changing history. Full evidence is in the
-[before scenario](results/retry_scenario_before.md) and
-[after scenario](results/retry_scenario_after.md).
-
-| Controlled measurement | Before | After |
-|---|---:|---:|
-| API attempts visible in JSONL | unavailable | 3 |
-| Retry backoff waits visible in JSONL | unavailable | 2 |
-| Measured retry wait | unavailable | 3,008.72 ms |
-| Local rate-limit wait | unavailable | 0.00 ms |
-| Generation duration | 3,010.53 ms | 3,009.19 ms |
-| End-to-end duration | 3,011.14 ms | 3,009.77 ms |
-
-The similar durations confirm that this change improves explanation, not
-speed: the after record attributes almost all generation time to two sleeps;
-the before record cannot.
-
-I then ran the complete formal retest with genuine Gemini responses:
+Build the local Chroma index and ask a question:
 
 ```bash
-python run_capstone_eval.py --label after
+python app.py index
+python app.py ask "How are juniors and seniors ranked in the housing lottery?"
 ```
 
-The retest reused the baseline's questions, process/cache conditions, and
-targets. It created 48 records and made 39 genuine Gemini attempts versus 27
-without retries. The
-[after report](results/capstone_eval_after.md),
-[machine-readable results](results/capstone_eval_after.json), and
-[raw after JSONL](results/capstone_eval_after.jsonl) are separate from the
-preserved before artifacts.
+Start an interactive session:
 
-### Before evaluation
+```bash
+python app.py ask
+```
 
-| Criterion | Target in each trial | Trial 1 | Trial 2 | Trial 3 | Verdict |
-|---|---|---|---|---|---|
-| 1. Logging completeness | Exactly 3 records for success/refusal/error; all 13 original required fields valid | 3/3; all valid | 3/3; all valid | 3/3; all valid | **MET** |
-| 2. End-to-end latency | At least 4/5 at or below 4,000 ms; all 5 at or below 7,000 ms after warm-up | 5/5; max 1,985.30 ms | 5/5; max 1,753.91 ms | 5/5; max 980.44 ms | **MET** |
-| 3. Token/cache accuracy | 3 fresh generations match session totals; repeated request is a cache hit with 0 new tokens | 2,161 = 2,161; cache 0/0 | 2,164 = 2,164; cache 0/0 | 2,157 = 2,157; cache 0/0 | **MET** |
-| 4. Failure observability | One safe error record; timings retained; canary absent; original exception re-raised | 56.66/0.07/56.75 ms; safe | 65.43/0.08/65.53 ms; safe | 57.40/0.15/57.58 ms; safe | **MET** |
-| 5. Session/request tracking | 4 unique request IDs; stable ID per process; new ID after restart; prior bytes preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | **MET** |
+Run the isolated test suite without calling Gemini or downloading an embedding
+model:
 
-### After evaluation
+```bash
+python -m unittest discover -s tests -v
+```
 
-| Criterion | Target in each trial | Trial 1 | Trial 2 | Trial 3 | Verdict |
-|---|---|---|---|---|---|
-| 1. Logging completeness | Exactly 3 records for success/refusal/error; all 13 original required fields valid | 3/3; extended 17-field schema valid | 3/3; extended 17-field schema valid | 3/3; extended 17-field schema valid | **MET** |
-| 2. End-to-end latency | At least 4/5 at or below 4,000 ms; all 5 at or below 7,000 ms after warm-up | 5/5; max 922.97 ms | 5/5; max 3,688.80 ms | 5/5; max 3,983.78 ms | **MET** |
-| 3. Token/cache accuracy | 3 fresh generations match session totals; repeated request is a cache hit with 0 new tokens | 2,160 = 2,160; cache 0/0 | First request exhausted retries; logged sum 1,407 vs session 2,154; repeat was not cached | 2,155 = 2,155; cache 0/0 | **MISSED** |
-| 4. Failure observability | One safe error record; timings retained; canary absent; original exception re-raised | 53.14/0.06/53.20 ms; safe | 59.32/0.07/59.40 ms; safe | 58.32/0.05/58.38 ms; safe | **MET** |
-| 5. Session/request tracking | 4 unique request IDs; stable ID per process; new ID after restart; prior bytes preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | 4/4 unique; sessions differ; preserved | **MET** |
+Run the full local environment check, including the embedding model, Chroma,
+and one genuine Gemini request:
 
-Representative actual after evidence for every criterion is preserved in the
-raw JSONL file:
+```bash
+python verify_environment.py
+```
 
-- **Criterion 1:** lines 2–4, 18–20, and 34–36 each contain exactly one
-  `success`, `refused`, and `error` record. Every record includes all original
-  required fields plus the four retry-observability fields.
-- **Criterion 2:** the scored end-to-end durations were 698.32, 922.97,
-  594.35, 633.83, and 716.21 ms in Trial 1; 722.80, 854.67, 856.29,
-  766.31, and 3,688.80 ms in Trial 2; and 2,006.66, 3,983.78, 506.05,
-  579.54, and 822.23 ms in Trial 3.
-- **Criterion 3:** line 25 records an exhausted request with
-  `api_attempts: 4`, `retry_count: 4`, `retry_wait_ms: 15013.23`, and no
-  token counts. Because it produced no cached response, line 28 is another
-  live request (`cache_hit: false`) rather than the required zero-token cache
-  hit. Trials 1 and 3 have valid cache-hit records on lines 12 and 44.
-- **Criterion 4:** lines 4, 20, and 36 contain safe
-  `ControlledGenerationError` records, measured stage timings, no raw canary,
-  and zero API attempts because the controlled exception occurs before the
-  provider call.
-- **Criterion 5:** lines 13–16, 29–32, and 45–48 contain four unique request
-  IDs per trial. The session pairs were
-  `09bd5cf6-8335-48d5-b490-86c058d50243` / `dff22aff-3b0e-4ea3-ac7f-f6161e8095e7`,
-  `6c55cad8-62a1-463b-82d5-8f067ac54ac8` / `57e99932-0abf-4d5d-b902-09c63f533969`,
-  and `55542112-fa78-428d-91e1-f6f0a682f3a4` / `73dd957a-f5bb-4c3f-a54c-6d46ca862410`.
+See [RUNNING.md](RUNNING.md) for Windows setup, alternate corpora, cache
+controls, log inspection, troubleshooting, and all CLI commands.
 
-Six genuine-Gemini records now expose waits previously hidden. Line 24
-succeeded after 3 attempts, 2 retries, and 3,005.66 ms of backoff within
-3,688.80 ms total. Overall: 39 attempts, 12 backoffs, 26,038.37 ms retry wait,
-and no proactive local rate-limit wait. The retest missed Criterion 3 Trial 2
-after provider pushback exhausted cache seeding; details and remaining limits
-follow.
+## Optional HTTP API
 
-**What's Still Broken**
+The Flask wrapper calls the same `ask_pipeline()` function as the CLI, so
+retrieval, gating, logging, and generation behavior stay in one place.
 
-Criterion 3 remained **MISSED** because provider rate limiting exhausted all
-four attempts on Trial 2's first cache-seeding request. Without a successful
-response, nothing could be cached, so the repeat required live generation
-instead of a zero-token cache hit.
+```bash
+python serve.py
+```
 
-This does not by itself indicate broken accounting or caching. With no Gemini
-response metadata, the failure correctly logged unknown tokens; later calls
-were counted, and both other trials produced correct cache hits. The external
-failure prevented the successful seed required to test the cache.
+```bash
+curl http://localhost:5000/health
 
-Several limitations remain:
+curl -X POST http://localhost:5000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What time does Halden Hall close?"}'
+```
 
-- Rate limiting is process-local, so separate workers do not coordinate even
-  though the provider sees one account.
-- Retry classification searches provider messages for `429`,
-  `resource exhausted`, or `rate limit`, so message changes may misclassify.
-- Network conditions, shared quotas, and provider behavior make results vary.
-- The retry loop sleeps after the last failed attempt, adding an unnecessary
-  8 seconds in the missed trial.
+## Structured request records
 
-I stopped after completing the bounded build-test-diagnose-improve-retest
-cycle. Rate-limit or retry-policy changes alter behavior and deserve a new
-design/evaluation cycle. The first future improvement should be coordinated
-cross-process limiting, such as a shared token bucket or request queue, so CLI,
-Flask, and evaluation workers share one provider budget.
+Requests append to the ignored local file `logs/rag_runs.jsonl`. Each line is
+independently parseable and contains:
 
-**How I Used AI**
+```text
+timestamp      session_id         request_id        question
+answer         status             retrieval_ms      generation_ms
+duration_ms    prompt_tokens      output_tokens     cache_hit
+api_attempts   retry_count        retry_wait_ms      rate_limit_wait_ms
+error
+```
 
-1. AI inspected the RAG pipeline and implemented JSONL logging, timings,
-   request-local token/cache/retry metrics, and isolated tests. I chose the
-   architecture and scope—Shape A, local logs, unchanged RAG behavior, and
-   append-only safe records—and reviewed each milestone.
+Unknown measurements remain `null` instead of being guessed. Refusals record
+zero tokens because Gemini is never called; cache hits record zero newly
+consumed tokens. Error messages are sanitized before being written.
 
-2. AI built the evaluator, aggregated evidence, calculated measurements,
-   diagnosed hidden retry time, helped draft the five criteria I approved, and
-   implemented my selected retry-observability improvement and simulation. I
-   set the targets and constraints, reviewed evidence, selected the
-   improvement, and retained the missed result without changing or rerunning
-   its target.
+## Project structure
+
+| Path | Responsibility |
+|---|---|
+| `app.py` | CLI and the shared, instrumented question-answering pipeline |
+| `ingest.py` / `chunker.py` | Document loading, cleaning, and corpus-aware chunking |
+| `store.py` | Local embeddings, Chroma persistence, semantic search, and BM25/RRF reranking |
+| `gate.py` | Relevance decision and deterministic refusal behavior |
+| `generate.py` | Grounded Gemini generation, caching, rate limits, retries, and token accounting |
+| `observability.py` | Validated append-only JSONL records and safe error serialization |
+| `serve.py` | Optional Flask API over the same pipeline |
+| `run_capstone_eval.py` | Reusable three-trial before/after evaluation harness |
+| `verify_environment.py` | Local dependency, embedding, Chroma, and Gemini verification |
+| `tests/` | Mocked tests for logging, timing, cache, usage, retry, failure, and isolation behavior |
+| `docs/` | Acceptance criteria and supporting project documentation |
+| `results/` | Preserved evaluation reports and raw evidence |
+
+## Current limitations and next steps
+
+- Rate limiting is process-local, so separate CLI or web workers do not share
+  one provider request budget. A shared token bucket or request queue is the
+  highest-priority reliability improvement.
+- Retry classification currently inspects provider exception messages for
+  rate-limit indicators instead of using typed provider error codes.
+- The retry loop sleeps after the final exhausted attempt, adding unnecessary
+  delay before returning the terminal error.
+- Chroma, response caching, and logs are local to one machine; this project has
+  not been converted into a distributed or cloud-hosted service.
+
+These constraints are intentionally documented because the evaluation work is
+meant to reveal system behavior, including failures, rather than present only
+successful demo runs.
+
+## Project context
+
+The Unofficial Guide was developed from a provided starter scaffold as a
+**CodePath AI201 capstone**. I extended that foundation with corpus-aware
+chunking, BM25/RRF reranking, formal evaluation, reproducible local execution,
+structured request logging, performance and token measurements, and
+request-local retry instrumentation. The acceptance criteria and preserved
+before/after evidence remain available for auditing.

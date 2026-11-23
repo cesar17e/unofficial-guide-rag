@@ -1,35 +1,22 @@
 #!/usr/bin/env python3
-"""
-Run your test questions repeatedly and write the results down.
+"""Run retrieval questions repeatedly and write an evidence report.
 
     python run_eval.py                 three runs, the default
     python run_eval.py --runs 5        more runs
     python run_eval.py --label after   name this run, e.g. before/after a fix
 
-This does the mechanical half of unit 2 for you: it asks each of your questions
-the same way three separate times, with caching turned off so you get three
-real answers, and writes everything into results/ as a table with one row per
-question.
+Each configured question runs three times by default with caching disabled so
+the report contains independent model responses. Results are written under
+`results/` with one row per question.
 
 It also puts every question in `OUT_OF_SCOPE` through retrieval and the gate
-and records what happened, so criterion 3 — the one about out-of-corpus
-questions — has evidence in the same file as the other four. That part costs
-nothing: a question the gate refuses never reaches the model.
+and records the gate decision. Refused questions do not reach Gemini.
 
-That table is the raw material for your run log, not the run log itself. The
-submission template wants one row per *criterion* — aggregating your questions
-up into your criteria is your work, not the script's.
-
-⚠️ What it does NOT do is decide whether an answer was right.
-
-That judgment is yours, and you'll build it in class in unit 2 as `scorer.py`.
-Until that file exists, the Run columns carry the raw answers and you read them
-yourself. Once it exists — a file called `scorer.py`, with a function
+The optional scorer determines whether an answer is correct. Without it, the
+report preserves raw answers for manual review. If `scorer.py` provides a
+function named
 `judge(question, expects, answer, results) -> bool` — this script finds it
 automatically and the Run columns carry verdicts instead.
-
-Deciding what counts as correct is the actual lesson. It would be easy to hand
-you a scorer; you'd learn nothing from it.
 """
 
 import argparse
@@ -42,7 +29,7 @@ import questions as qs
 
 
 def load_scorer():
-    """Use scorer.py if the student has built it. Otherwise run unscored."""
+    """Use scorer.py when available; otherwise preserve unscored answers."""
     try:
         import scorer  # noqa: PLC0415
     except ImportError:
@@ -86,7 +73,7 @@ def main():
     if not items:
         print(
             "questions.py has no questions in it yet.\n"
-            "Milestone 2 asks you to write five. Fill them in and run this again.",
+            "Add evaluation questions and run this command again.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -94,10 +81,10 @@ def main():
     judge = load_scorer()
     if judge is None:
         print("No scorer.py found — running unscored. Verdict column will be blank.")
-        print("You'll build scorer.py in class in unit 2.\n")
+        print("Raw answers will remain available for manual review.\n")
 
     if args.runs < 3:
-        print(f"⚠️  {args.runs} run(s). The submission asks for three.\n")
+        print(f"⚠️  {args.runs} run(s). Acceptance testing uses three.\n")
 
     transcript = []
     rows = []
@@ -142,11 +129,9 @@ def main():
 def check_out_of_scope(top_k, threshold, corpus, variant):
     """Put every OUT_OF_SCOPE question through retrieval and the gate.
 
-    Criterion 3 in criteria.md is about questions the corpus doesn't cover, and
-    it needs evidence in the run log like the other four. This costs nothing:
-    a question the gate refuses never reaches the model, so there is no API
-    call and no reason to run it three times — retrieval is deterministic and
-    the gate is a comparison against a fixed number.
+    The acceptance criteria include questions the corpus does not cover. A
+    refusal never reaches Gemini, and deterministic retrieval means one pass
+    over this list is sufficient.
     """
     from store import search
     import gate
@@ -196,9 +181,8 @@ def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, sc
         f"- Runs per question: {n}, caching off",
         f"- When: {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
-        "This table is one row per QUESTION. The run log your README asks for is",
-        "one row per CRITERION, so aggregate these into it — criterion 1 is how many",
-        "of your questions had the answer in the retrieved chunks, and so on.",
+        "This table reports each question independently. Aggregate these rows",
+        "when evaluating system-level acceptance criteria.",
         "",
         f"| Question | {run_headers} |",
         f"|---|{run_divider}|",
@@ -243,9 +227,7 @@ def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, sc
             lines.append(f"| {question} | {row['best_distance']:.3f} | {verdict} |")
 
     lines += ["", "---", "", "## Real output", "",
-              "This is what the system actually produced. Paste the relevant parts",
-              "into your README underneath the table — the rubric asks for real",
-              "output as text, not a description of it.", ""]
+              "Unedited generated answers and their retrieved sources follow.", ""]
 
     for entry in transcript:
         lines += [
@@ -267,7 +249,7 @@ def write_report(rows, transcript, gate_rows, args, corpus, top_k, threshold, sc
 
     print(f"\nWrote {path.relative_to(config.ROOT)}")
     print(gen.usage())
-    print("\nCommit this file. It's the evidence the run actually happened.")
+    print("\nPreserve this report when it is used as evaluation evidence.")
 
 
 if __name__ == "__main__":

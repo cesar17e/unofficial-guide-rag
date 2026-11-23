@@ -1,31 +1,10 @@
-"""
-Stage 5 of the pipeline: writing the answer.
+"""Grounded Gemini generation with caching, pacing, and usage accounting.
 
-This is the only part of your system that calls out to a service. Everything
-else runs on your laptop.
-
-Every outgoing call in this course goes through `generate()` below. That
-matters for a practical reason: the free tier allows only a small number of
-calls per minute, and a previous cohort ran into that wall hard. Rather than
-asking three hundred students to each write their own pacing code, the pacing
-lives here, once.
-
-What this function does for you:
-
-  • Paces requests so you stay under the per-minute limit, and tells you when
-    it's waiting. A pause is the limiter doing its job, not a hang.
-  • Caches repeated prompts while you're building, so re-running the same
-    question twenty times while you debug costs one call.
-  • Stops with a warning if a session goes through an unreasonable number of
-    calls, instead of silently draining your whole day's allowance.
-  • Retries when the service says you're going too fast.
-  • Counts your calls, and the tokens they used, so what a run cost is a
-    number you can see rather than one you estimate.
-
-⚠️ Caching is ON while you build and OFF during evaluation. Your unit 2
-testing needs three real answers to the same question, not one answer three
-times over.
-`run_eval.py` passes cache=False for you.
+This is the only pipeline stage that calls an external service. Every outgoing
+Gemini request passes through `generate()`, which provides process-local rate
+limiting, a session budget, response caching, exponential retry backoff, and
+request/session token accounting. Evaluation callers disable caching when they
+need independent model responses.
 """
 
 import hashlib
@@ -274,7 +253,7 @@ def _get_client():
             raise RuntimeError(
                 "No GEMINI_API_KEY found.\n"
                 "Copy .env.example to .env and paste your key in, then try "
-                "again. `python test.py` will confirm it's working."
+                "again. `python verify_environment.py` will confirm it works."
             )
         _client = genai.Client(api_key=key)
     return _client
@@ -291,8 +270,8 @@ def generate(prompt: str, system: str | None = None, cache: bool = True) -> str:
                 True while building. Pass False when you're evaluating — three
                 runs of the same question have to be three real answers.
 
-    Every call in this course goes through here. If you need to change how the
-    model is called, change it in this one place.
+    All model traffic goes through this function so caching, pacing, retries,
+    and accounting remain consistent across CLI and HTTP callers.
     """
     global _session_calls, _cache_hits
 

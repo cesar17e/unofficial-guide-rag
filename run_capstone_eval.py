@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate the Unit 9 capstone instrumentation against its five criteria.
+"""Evaluate request instrumentation against the five acceptance criteria.
 
 Usage:
 
@@ -753,7 +753,7 @@ def parent_main(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Unit 9 capstone acceptance evaluation.")
+    parser = argparse.ArgumentParser(description="Run the three-trial acceptance evaluation.")
     parser.add_argument("--label", required=True, choices=("before", "after"))
     parser.add_argument("--worker", choices=("core", "cache", "tracking"), help=argparse.SUPPRESS)
     parser.add_argument("--trial", type=int, help=argparse.SUPPRESS)
